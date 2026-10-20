@@ -32,13 +32,6 @@ cargo build --release
 # Binary at target/release/subtake
 ```
 
-### Pre-built Binary
-
-```bash
-# Already installed at ~/.local/bin/subtake
-# Or download from releases
-```
-
 ## 🚀 Usage
 
 ```bash
