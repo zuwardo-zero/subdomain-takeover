@@ -29,7 +29,6 @@ A fast, concurrent subdomain takeover detection tool written in Rust. It enumera
 git clone https://github.com/zuwardo-zero/subdomain-takeover
 cd subdomain-takeover
 cargo build --release
-# Binary at target/release/subtake
 ```
 
 ## 🚀 Usage
