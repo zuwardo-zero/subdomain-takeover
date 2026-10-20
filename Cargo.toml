@@ -1,0 +1,65 @@
+[package]
+name = "subdomain-takeover"
+version = "0.1.0"
+edition = "2021"
+description = "Subdomain takeover detection tool - enumerates subdomains via CT logs and DNS brute force, checks for dangling DNS records pointing to unclaimed cloud resources"
+license = "MIT"
+repository = "https://github.com/wizard-zero/subdomain-takeover"
+authors = ["wizard-zero"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.38", features = ["full"] }
+anyhow = "1.0"
+thiserror = "1.0"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip", "brotli", "deflate", "cookies"] }
+
+# DNS resolution
+trust-dns-resolver = { version = "0.23", features = ["tokio-runtime", "dns-over-rustls", "dnssec", "dnssec-openssl"] }
+trust-dns-proto = { version = "0.23", features = ["dnssec"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+
+# Progress bars and UI
+indicatif = "0.17"
+console = "0.15"
+
+# Concurrency control
+futures = "0.3"
+dashmap = "5.5"
+
+# Regex for fingerprint matching
+regex = "1.10"
+
+# URL parsing
+url = "2.5"
+
+# Base64 for some encoding
+base64 = "0.22"
+
+# Random for jitter
+rand = "0.8"
+
+# Time utilities
+chrono = { version = "0.4", features = ["serde"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "subtake"
+path = "src/main.rs"

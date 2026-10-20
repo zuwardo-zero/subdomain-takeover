@@ -1,0 +1,1690 @@
+{
+  "providers": [
+    {
+      "name": "AWS S3",
+      "id": "aws_s3",
+      "cname_patterns": [
+        "s3.amazonaws.com",
+        "s3-website",
+        "s3.",
+        ".s3.amazonaws.com",
+        "s3-website-",
+        ".s3-website."
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404,
+            403
+          ],
+          "body_patterns": [
+            "NoSuchBucket",
+            "The specified bucket does not exist"
+          ],
+          "description": "S3 bucket does not exist - can be claimed"
+        },
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "NoSuchKey"
+          ],
+          "description": "S3 object not found - bucket may exist but is unclaimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "AWS Elastic Beanstalk",
+      "id": "aws_elastic_beanstalk",
+      "cname_patterns": [
+        "elasticbeanstalk.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [],
+          "description": "NXDOMAIN - Elastic Beanstalk environment not found",
+          "nxdomain": true
+        }
+      ],
+      "nxdomain": true,
+      "confidence": "High"
+    },
+    {
+      "name": "GitHub Pages",
+      "id": "github_pages",
+      "cname_patterns": [
+        "github.io",
+        "githubusercontent.com",
+        "github.com"
+      ],
+      "a_record_patterns": [
+        "185.199.108.153",
+        "185.199.109.153",
+        "185.199.110.153",
+        "185.199.111.153"
+      ],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "There isn't a GitHub Pages site here",
+            "Project not found",
+            "Page not found",
+            "404: Not found"
+          ],
+          "description": "GitHub Pages site not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Heroku",
+      "id": "heroku",
+      "cname_patterns": [
+        "herokuapp.com",
+        "herokudns.com",
+        "herokussl.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404,
+            503
+          ],
+          "body_patterns": [
+            "No such app",
+            "There is no app configured at that hostname",
+            "The app you were looking for could not be found",
+            "Heroku | No such app"
+          ],
+          "description": "Heroku app not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Microsoft Azure Web App",
+      "id": "azure_webapp",
+      "cname_patterns": [
+        "azurewebsites.net",
+        "cloudapp.net",
+        "cloudapp.azure.com",
+        "trafficmanager.net",
+        "azure-api.net",
+        "azurehdinsight.net",
+        "azureedge.net",
+        "azurecontainer.io",
+        "database.windows.net",
+        "azuredatalakestore.net",
+        "search.windows.net",
+        "azurecr.io",
+        "redis.cache.windows.net",
+        "servicebus.windows.net",
+        "visualstudio.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404,
+            403
+          ],
+          "body_patterns": [
+            "404 Web Site not found",
+            "The resource you are looking for has been removed",
+            "This web app is stopped",
+            "You have reached a web app that is not yet configured"
+          ],
+          "description": "Azure Web App not found or stopped - can be claimed"
+        },
+        {
+          "status_codes": [],
+          "body_patterns": [],
+          "description": "NXDOMAIN - Azure resource not found",
+          "nxdomain": true
+        }
+      ],
+      "nxdomain": true,
+      "confidence": "High"
+    },
+    {
+      "name": "Netlify",
+      "id": "netlify",
+      "cname_patterns": [
+        "netlify.app",
+        "netlify.com"
+      ],
+      "a_record_patterns": [
+        "75.2.60.5",
+        "99.83.190.102",
+        "104.198.14.52"
+      ],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Not found - Netlify",
+            "Site not found",
+            "Page not found",
+            "Deploy not found",
+            "Not Found - Request ID:"
+          ],
+          "description": "Netlify site not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Fastly",
+      "id": "fastly",
+      "cname_patterns": [
+        "fastly.net",
+        "fastlylb.net",
+        "edgekey.net",
+        "edgesuite.net"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404,
+            503
+          ],
+          "body_patterns": [
+            "Fastly error: unknown domain",
+            "Fastly error: unknown domain:"
+          ],
+          "description": "Fastly domain not configured - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Shopify",
+      "id": "shopify",
+      "cname_patterns": [
+        "myshopify.com",
+        "shopify.com"
+      ],
+      "a_record_patterns": [
+        "23.227.38.65",
+        "23.227.38.32"
+      ],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Sorry, this shop is currently unavailable",
+            "may have typed the web address incorrectly",
+            "The store could not be found"
+          ],
+          "description": "Shopify store not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "GitLab Pages",
+      "id": "gitlab_pages",
+      "cname_patterns": [
+        "gitlab.io",
+        "gitlab-pages.gitlab.io"
+      ],
+      "a_record_patterns": [
+        "35.185.44.232"
+      ],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Project not found",
+            "The page could not be found",
+            "404 - GitLab Pages"
+          ],
+          "description": "GitLab Pages project not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Cloudflare Pages",
+      "id": "cloudflare_pages",
+      "cname_patterns": [
+        "pages.dev",
+        "cloudflarepages.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Project not found",
+            "Deployment not found",
+            "This site can't be reached"
+          ],
+          "description": "Cloudflare Pages project not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Vercel",
+      "id": "vercel",
+      "cname_patterns": [
+        "vercel.app",
+        "now.sh",
+        "vercel-dns.com"
+      ],
+      "a_record_patterns": [
+        "76.76.21.21",
+        "76.76.21.98"
+      ],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Deployment not found",
+            "The deployment you are looking for does not exist",
+            "404 - Vercel",
+            "DEPLOYMENT_NOT_FOUND"
+          ],
+          "description": "Vercel deployment not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Firebase Hosting",
+      "id": "firebase",
+      "cname_patterns": [
+        "firebaseapp.com",
+        "web.app"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Site not found",
+            "The requested URL was not found on this server",
+            "Firebase Hosting error"
+          ],
+          "description": "Firebase site not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Bitbucket Pages",
+      "id": "bitbucket",
+      "cname_patterns": [
+        "bitbucket.io"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Repository not found",
+            "Page not found",
+            "404 - Bitbucket"
+          ],
+          "description": "Bitbucket Pages repository not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Surge.sh",
+      "id": "surge",
+      "cname_patterns": [
+        "surge.sh",
+        "na-west1.surge.sh"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Not found - Surge",
+            "project not found",
+            "404 - Surge"
+          ],
+          "description": "Surge project not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Pantheon",
+      "id": "pantheon",
+      "cname_patterns": [
+        "pantheonsite.io",
+        "gotpantheon.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404,
+            503
+          ],
+          "body_patterns": [
+            "The gods are wise, but they do not know this site",
+            "This site is not configured",
+            "Site not found",
+            "404 error unknown site!"
+          ],
+          "description": "Pantheon site not configured - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Acquia Cloud",
+      "id": "acquia",
+      "cname_patterns": [
+        "acquia-sites.com",
+        "acsitefactory.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404,
+            503
+          ],
+          "body_patterns": [
+            "Site not found",
+            "The website you are looking for is not available"
+          ],
+          "description": "Acquia site not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Ghost(Pro)",
+      "id": "ghost",
+      "cname_patterns": [
+        "ghost.io",
+        "ghost.org"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The site you were looking for doesn't exist",
+            "Ghost publication not found",
+            "Site unavailable",
+            "Failed to resolve DNS path for this host"
+          ],
+          "description": "Ghost publication not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Webflow",
+      "id": "webflow",
+      "cname_patterns": [
+        "webflow.io",
+        "webflow.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The page you are looking for doesn't exist",
+            "Webflow - Page not found",
+            "404 - Webflow",
+            "The page you are looking for doesn't exist or has been moved"
+          ],
+          "description": "Webflow page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Wix",
+      "id": "wix",
+      "cname_patterns": [
+        "wixsite.com",
+        "wix.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "This site has been removed",
+            "The page you're looking for doesn't exist",
+            "Wix - Page not found",
+            "Looks Like This Domain Isn't Connected To A Website Yet!"
+          ],
+          "description": "Wix site removed - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Squarespace",
+      "id": "squarespace",
+      "cname_patterns": [
+        "squarespace.com",
+        "sqsp.net"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "This page doesn't exist",
+            "No such page",
+            "Squarespace - Page not found"
+          ],
+          "description": "Squarespace page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Agile CRM",
+      "id": "agile_crm",
+      "cname_patterns": [
+        "agilecrm.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Sorry, this page is no longer available"
+          ],
+          "description": "Agile CRM page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Anima",
+      "id": "anima",
+      "cname_patterns": [
+        "animaapp.io"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The page you were looking for does not exist"
+          ],
+          "description": "Anima page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Campaign Monitor",
+      "id": "campaign_monitor",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Trying to access your account?"
+          ],
+          "description": "Campaign Monitor account not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Canny",
+      "id": "canny",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Company Not Found",
+            "There is no such company. Did you enter the right URL?"
+          ],
+          "description": "Canny company not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Cargo Collective",
+      "id": "cargo_collective",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "404 Not Found"
+          ],
+          "description": "Cargo Collective page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Digital Ocean",
+      "id": "digitalocean",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [],
+          "description": "Domain uses DO name servers with no records in DO",
+          "nxdomain": true
+        }
+      ],
+      "nxdomain": true,
+      "confidence": "High"
+    },
+    {
+      "name": "Discourse",
+      "id": "discourse",
+      "cname_patterns": [
+        "trydiscourse.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [],
+          "description": "NXDOMAIN - Discourse site not found",
+          "nxdomain": true
+        }
+      ],
+      "nxdomain": true,
+      "confidence": "High"
+    },
+    {
+      "name": "Frontify",
+      "id": "frontify",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "404 - Page Not Found",
+            "Oops... looks like you got lost"
+          ],
+          "description": "Frontify page not found - edge case"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Gemfury",
+      "id": "gemfury",
+      "cname_patterns": [
+        "furyns.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "404: This page could not be found"
+          ],
+          "description": "Gemfury page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "GetResponse",
+      "id": "getresponse",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "With GetResponse Landing Pages, lead generation has never been easier"
+          ],
+          "description": "GetResponse landing page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "HatenaBlog",
+      "id": "hatena_blog",
+      "cname_patterns": [
+        "hatenablog.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "404 Blog is not found"
+          ],
+          "description": "Hatena Blog not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Help Juice",
+      "id": "help_juice",
+      "cname_patterns": [
+        "helpjuice.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "We could not find what you're looking for"
+          ],
+          "description": "Help Juice page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Help Scout",
+      "id": "help_scout",
+      "cname_patterns": [
+        "helpscoutdocs.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "No settings were found for this company:"
+          ],
+          "description": "Help Scout docs not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Helprace",
+      "id": "helprace",
+      "cname_patterns": [
+        "helprace.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            301
+          ],
+          "body_patterns": [
+            "HTTP_STATUS=301"
+          ],
+          "description": "Helprace redirect - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Intercom",
+      "id": "intercom",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Uh oh. That page doesn't exist."
+          ],
+          "description": "Intercom page not found - edge case"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "JetBrains YouTrack",
+      "id": "jetbrains_youtrack",
+      "cname_patterns": [
+        "youtrack.cloud"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "is not a registered InCloud YouTrack"
+          ],
+          "description": "JetBrains YouTrack not registered - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Landingi",
+      "id": "landingi",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "It looks like you're lost..."
+          ],
+          "description": "Landingi page not found - edge case"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "LaunchRock",
+      "id": "launchrock",
+      "cname_patterns": [
+        "launchrock.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            500
+          ],
+          "body_patterns": [
+            "HTTP_STATUS=500"
+          ],
+          "description": "LaunchRock error - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Mashery",
+      "id": "mashery",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Unrecognized domain"
+          ],
+          "description": "Mashery unrecognized domain - edge case"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Microsoft Azure",
+      "id": "microsoft_azure",
+      "cname_patterns": [
+        "cloudapp.net",
+        "cloudapp.azure.com",
+        "azurewebsites.net",
+        "blob.core.windows.net",
+        "azure-api.net",
+        "azurehdinsight.net",
+        "azureedge.net",
+        "azurecontainer.io",
+        "database.windows.net",
+        "azuredatalakestore.net",
+        "search.windows.net",
+        "azurecr.io",
+        "redis.cache.windows.net",
+        "servicebus.windows.net",
+        "visualstudio.com",
+        "azurehdinsight.net"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [],
+          "description": "NXDOMAIN - Azure resource not found",
+          "nxdomain": true
+        }
+      ],
+      "nxdomain": true,
+      "confidence": "High"
+    },
+    {
+      "name": "Ngrok",
+      "id": "ngrok",
+      "cname_patterns": [
+        "ngrok.io"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Tunnel .*\\.ngrok\\.io not found"
+          ],
+          "description": "Ngrok tunnel not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Pingdom",
+      "id": "pingdom",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Sorry, couldn't find the status page"
+          ],
+          "description": "Pingdom status page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Readme.io",
+      "id": "readme_io",
+      "cname_patterns": [
+        "readme.io"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The creators of this project are still working on making everything perfect!"
+          ],
+          "description": "Readme.io project not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Readthedocs",
+      "id": "readthedocs",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The link you have followed or the URL that you entered does not exist."
+          ],
+          "description": "Readthedocs project not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Short.io",
+      "id": "short_io",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Link does not exist"
+          ],
+          "description": "Short.io link not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "SmartJobBoard",
+      "id": "smartjobboard",
+      "cname_patterns": [
+        "smartjobboard.com"
+      ],
+      "a_record_patterns": [
+        "52.16.160.97"
+      ],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "This job board website is either expired or its domain name is invalid"
+          ],
+          "description": "SmartJobBoard expired - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Smartling",
+      "id": "smartling",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Domain is not configured"
+          ],
+          "description": "Smartling domain not configured - edge case"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Strikingly",
+      "id": "strikingly",
+      "cname_patterns": [
+        "s.strikinglydns.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "PAGE NOT FOUND."
+          ],
+          "description": "Strikingly page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "SurveySparrow",
+      "id": "surveysparrow",
+      "cname_patterns": [
+        "surveysparrow.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Account not found."
+          ],
+          "description": "SurveySparrow account not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Tilda",
+      "id": "tilda",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Please renew your subscription"
+          ],
+          "description": "Tilda subscription expired - edge case"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Tumblr",
+      "id": "tumblr",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Whatever you were looking for doesn't currently exist at this address"
+          ],
+          "description": "Tumblr page not found - edge case"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Uberflip",
+      "id": "uberflip",
+      "cname_patterns": [
+        "read.uberflip.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The URL you've accessed does not provide a hub."
+          ],
+          "description": "Uberflip hub not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Uptimerobot",
+      "id": "uptimerobot",
+      "cname_patterns": [
+        "stats.uptimerobot.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "page not found"
+          ],
+          "description": "Uptimerobot status page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "WordPress",
+      "id": "wordpress",
+      "cname_patterns": [
+        "wordpress.com"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Do you want to register .*\\.wordpress\\.com\\?"
+          ],
+          "description": "WordPress.com site not registered - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Worksites",
+      "id": "worksites",
+      "cname_patterns": [
+        "worksites.net"
+      ],
+      "a_record_patterns": [
+        "69.164.223.206"
+      ],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Hello! Sorry, but the website you&rsquo;re looking for doesn&rsquo;t exist."
+          ],
+          "description": "Worksites site not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Zendesk",
+      "id": "zendesk",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Help Center Closed"
+          ],
+          "description": "Zendesk help center closed - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Airee.ru",
+      "id": "airee_ru",
+      "cname_patterns": [
+        "airee.ru"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            402
+          ],
+          "body_patterns": [
+            "\u041e\u0448\u0438\u0431\u043a\u0430 402. \u0421\u0435\u0440\u0432\u0438\u0441 \u0410\u0439\u0440\u0438.\u0440\u0444 \u043d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d"
+          ],
+          "description": "Airee.ru service unpaid - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "JetBrains",
+      "id": "jetbrains",
+      "cname_patterns": [
+        "youtrack.cloud"
+      ],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "is not a registered InCloud YouTrack"
+          ],
+          "description": "JetBrains YouTrack not registered - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Akamai",
+      "id": "akamai",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [],
+          "description": "ViewerCertificateException",
+          "nxdomain": false
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Cloudfront",
+      "id": "cloudfront",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [
+            "ViewerCertificateException"
+          ],
+          "description": "ViewerCertificateException",
+          "nxdomain": false
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Desk",
+      "id": "desk",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [
+            "Please try again or try Desk.com free for 14 days."
+          ],
+          "description": "Desk free trial offer"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Dreamhost",
+      "id": "dreamhost",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The requested URL was not found on this server. That's all we know."
+          ],
+          "description": "Dreamhost 404 page"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Feedpress",
+      "id": "feedpress",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [
+            "The feed has not been found."
+          ],
+          "description": "Feedpress feed not found"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Fly.io",
+      "id": "fly_io",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "404 Not Found"
+          ],
+          "description": "Fly.io 404 page"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Freshdesk",
+      "id": "freshdesk",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "We couldn't find servicedesk.victim.tld Maybe this is still fresh! You can claim it now at http://www.freshservice.com/signup"
+          ],
+          "description": "Freshdesk not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Key CDN",
+      "id": "key_cdn",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Unrecognized domain"
+          ],
+          "description": "Key CDN unrecognized domain"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Kinsta",
+      "id": "kinsta",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "No Site For Domain"
+          ],
+          "description": "Kinsta 404 page"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Mailchimp",
+      "id": "mailchimp",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "We can't find that page It looks like you're trying to reach a page that was built by Mailchimp but is no longer active."
+          ],
+          "description": "Mailchimp page no longer active"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Smugsmug",
+      "id": "smugsmug",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Whatever you were looking for doesn't currently exist at this address"
+          ],
+          "description": "Smugsmug 404 page"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Bitbucket",
+      "id": "bitbucket_org",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "Repository not found",
+            "Page not found",
+            "404 - Bitbucket"
+          ],
+          "description": "Bitbucket Pages repository not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Unbounce",
+      "id": "unbounce",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The requested URL was not found on this server."
+          ],
+          "description": "Unbounce 404 page"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "UserVoice",
+      "id": "uservoice",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [
+            "This UserVoice subdomain is currently available!"
+          ],
+          "description": "UserVoice subdomain available"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "WP Engine",
+      "id": "wp_engine",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [],
+          "body_patterns": [],
+          "description": ""
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Google Cloud Storage",
+      "id": "google_cloud_storage",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "<?xml version='1.0' encoding='UTF-8'?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist.</Message></Error>"
+          ],
+          "description": "Google Cloud Storage bucket not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "Google Sites",
+      "id": "google_sites",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The requested URL was not found on this server. That's all we know."
+          ],
+          "description": "Google Sites 404 page - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "High"
+    },
+    {
+      "name": "HubSpot",
+      "id": "hubspot",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "This page isn't available"
+          ],
+          "description": "HubSpot page not found - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Instapage",
+      "id": "instapage",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "No Site For Domain"
+          ],
+          "description": "Instapage 404 page - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    },
+    {
+      "name": "Sendgrid",
+      "id": "sendgrid",
+      "cname_patterns": [],
+      "a_record_patterns": [],
+      "takeover_signatures": [
+        {
+          "status_codes": [
+            404
+          ],
+          "body_patterns": [
+            "The requested URL was not found on this server."
+          ],
+          "description": "Sendgrid 404 page - can be claimed"
+        }
+      ],
+      "nxdomain": false,
+      "confidence": "Medium"
+    }
+  ]
+}
