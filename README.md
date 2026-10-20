@@ -168,31 +168,31 @@ dev.example.com,true,AwsS3,AWS S3,dev-example-com.s3.amazonaws.com,404,High,S3 b
 
 ## ☁️ Cloud Providers Detected
 
-|| Provider | CNAME Patterns | Takeover Signatures |
+| Provider | CNAME Patterns | Takeover Signatures |
 |----------|---------------|---------------------|
-| AWS S3 | `s3.amazonaws.com`, `s3-website`, `.s3.amazonaws.com` | `NoSuchBucket`, `The specified bucket does not exist` |
-| AWS Elastic Beanstalk | `elasticbeanstalk.com` | NXDOMAIN - environment not found |
-| GitHub Pages | `github.io`, `githubusercontent.com` | `There isn't a GitHub Pages site here` |
-| Heroku | `herokuapp.com`, `herokudns.com` | `No such app`, `There is no app configured at that hostname` |
-| Microsoft Azure Web App | `azurewebsites.net`, `cloudapp.net` | `404 Web Site not found`, `web app is stopped` |
-| Netlify | `netlify.app`, `netlify.com` | `Not found - Netlify`, `Site not found` |
-| Fastly | `fastly.net`, `fastlylb.net`, `edgekey.net` | `Fastly error: unknown domain` |
-| Shopify | `myshopify.com` | `may have typed the web address incorrectly` |
-| GitLab Pages | `gitlab.io` | `Project not found` |
-| Cloudflare Pages | `pages.dev` | `Project not found`, `Deployment not found` |
-| Vercel | `vercel.app`, `now.sh` | `Deployment not found` |
-| Firebase Hosting | `firebaseapp.com`, `web.app` | `Site not found` |
-| Bitbucket Pages | `bitbucket.io` | `Repository not found` |
-| Surge.sh | `surge.sh` | `Not found - Surge` |
-| Pantheon | `pantheonsite.io` | `The gods are wise` |
-| Acquia Cloud | `acquia-sites.com` | `Site not found` |
-| Ghost(Pro) | `ghost.io` | `doesn't exist` |
-| Webflow | `webflow.io` | `doesn't exist` |
-| Wix | `wixsite.com` | `This site has been removed` |
-| Squarespace | `squarespace.com` | `This page doesn't exist` |
-| Agile CRM | `agilecrm.com` | `Sorry, this page is no longer available` |
-| Airee.ru | `airee.ru` | Service unpaid - can be claimed |
-| Anima | `animaapp.io` | The page you were looking for does not exist |
+| AWS S3 | s3.amazonaws.com, s3-website, .s3.amazonaws.com | NoSuchBucket, The specified bucket does not exist |
+| AWS Elastic Beanstalk | elasticbeanstalk.com | NXDOMAIN - environment not found |
+| GitHub Pages | github.io, githubusercontent.com | There isn't a GitHub Pages site here |
+| Heroku | herokuapp.com, herokudns.com | No such app, There is no app configured at that hostname |
+| Microsoft Azure Web App | azurewebsites.net, cloudapp.net | 404 Web Site not found, web app is stopped |
+| Netlify | netlify.app, netlify.com | Not found - Netlify, Site not found |
+| Fastly | fastly.net, fastlylb.net, edgekey.net | Fastly error: unknown domain |
+| Shopify | myshopify.com | may have typed the web address incorrectly |
+| GitLab Pages | gitlab.io | Project not found |
+| Cloudflare Pages | pages.dev | Project not found, Deployment not found |
+| Vercel | vercel.app, now.sh | Deployment not found |
+| Firebase Hosting | firebaseapp.com, web.app | Site not found |
+| Bitbucket Pages | bitbucket.io | Repository not found |
+| Surge.sh | surge.sh | Not found - Surge |
+| Pantheon | pantheonsite.io | The gods are wise |
+| Acquia Cloud | acquia-sites.com | Site not found |
+| Ghost(Pro) | ghost.io | doesn't exist |
+| Webflow | webflow.io | doesn't exist |
+| Wix | wixsite.com | This site has been removed |
+| Squarespace | squarespace.com | This page doesn't exist |
+| Agile CRM | agilecrm.com | Sorry, this page is no longer available |
+| Airee.ru | airee.ru | Service unpaid - can be claimed |
+| Anima | animaapp.io | The page you were looking for does not exist |
 | Campaign Monitor | (no CNAME) | Trying to access your account? |
 | Canny | (no CNAME) | Company Not Found, There is no such company |
 | Cargo Collective | (no CNAME) | 404 Not Found |
@@ -203,7 +203,7 @@ dev.example.com,true,AwsS3,AWS S3,dev-example-com.s3.amazonaws.com,404,High,S3 b
 | Fly.io | (no CNAME) | 404 Not Found |
 | Freshdesk | (no CNAME) | We couldn't find servicedesk.victim.tld |
 | GetResponse | (no CNAME) | With GetResponse Landing Pages, lead generation has never been easier |
-| Ghost | `ghost.io` | The site you were looking for doesn't exist |
+| Ghost | ghost.io | The site you were looking for doesn't exist |
 | Google Cloud Storage | (no CNAME) | The specified bucket does not exist |
 | Google Sites | (no CNAME) | The requested URL was not found on this server |
 | HubSpot | (no CNAME) | This page isn't available |
@@ -216,8 +216,8 @@ dev.example.com,true,AwsS3,AWS S3,dev-example-com.s3.amazonaws.com,404,High,S3 b
 | Unbounce | (no CNAME) | The requested URL was not found on this server |
 | UserVoice | (no CNAME) | This UserVoice subdomain is currently available! |
 | WP Engine | (no CNAME) | (empty) |
-| WordPress | `wordpress.com` | Do you want to register .*.wordpress.com? |
-| Worksites | `worksites.net` | Hello! Sorry, but the website you're looking for doesn't exist. |
+| WordPress | wordpress.com | Do you want to register .*.wordpress.com? |
+| Worksites | worksites.net | Hello! Sorry, but the website you're looking for doesn't exist. |
 | Zendesk | (no CNAME) | Help Center Closed |
 
 *(78 total providers - view full list with `subtake --help`)*
