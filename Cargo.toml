@@ -1,11 +1,11 @@
 [package]
 name = "subdomain-takeover"
 version = "0.1.0"
-edition = "2021"
+edition = "2026"
 description = "Subdomain takeover detection tool - enumerates subdomains via CT logs and DNS brute force, checks for dangling DNS records pointing to unclaimed cloud resources"
 license = "MIT"
 repository = "https://github.com/wizard-zero/subdomain-takeover"
-authors = ["wizard-zero"]
+authors = ["zuwardo-zero"]
 
 [dependencies]
 # Async runtime
