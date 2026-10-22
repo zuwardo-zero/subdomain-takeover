@@ -1,1 +1,9 @@
 /target
+
+# Scan output artifacts
+results.json
+results.txt
+results.csv
+benchmark.json
+test-results.json
+test-results.txt

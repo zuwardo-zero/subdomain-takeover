@@ -16,93 +16,33 @@ pub mod benchmark;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Semaphore;
 
-#[derive(Parser, Debug, Clone)]
-#[command(name = "subdomain-takeover", version, about, long_about = None)]
-pub struct Args {
-    /// Target domain (e.g., example.com)
-    #[arg(short, long)]
-    pub domain: String,
+/// Truncate a string to at most `max_bytes` bytes without splitting a UTF-8
+/// character (plain slicing can panic on multi-byte boundaries).
+pub fn safe_truncate(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
 
-    /// Output file for results (JSON)
-    #[arg(short, long, default_value = "results.json")]
-    pub output: PathBuf,
-
-    /// Enable CT log enumeration
-    #[arg(long, default_value = "true")]
-    pub ct_logs: bool,
-
-    /// Enable DNS brute force
-    #[arg(long, default_value = "true")]
-    pub brute_force: bool,
-
-    /// Custom wordlist file for DNS brute force
-    #[arg(short, long)]
-    pub wordlist: Option<PathBuf>,
-
-    /// Number of concurrent DNS resolutions
-    #[arg(short, long, default_value = "100")]
-    pub concurrency: usize,
-
-    /// Number of concurrent HTTP checks
-    #[arg(long, default_value = "50")]
-    pub http_concurrency: usize,
-
-    /// Timeout for HTTP requests (seconds)
-    #[arg(long, default_value = "10")]
-    pub timeout: u64,
-
-    /// Follow HTTP redirects
-    #[arg(long, default_value = "true")]
-    pub follow_redirects: bool,
-
-    /// Only show vulnerable subdomains
-    #[arg(long)]
-    pub only_vulnerable: bool,
-
-    /// Verbose output
-    #[arg(short, long)]
-    pub verbose: bool,
-
-    /// Silent mode (only output JSON)
-    #[arg(short, long)]
-    pub silent: bool,
-
-    /// DNS resolver to use (e.g., 8.8.8.8, 1.1.1.1)
-    #[arg(long, default_value = "1.1.1.1")]
-    pub resolver: String,
-
-    /// Maximum subdomains to check (0 = unlimited)
-    #[arg(long, default_value = "0")]
-    pub max_subdomains: usize,
-
-    /// Enable subdomain permutation/alteration
-    #[arg(long, default_value = "false")]
-    pub permute: bool,
-
-    /// Enable recursive brute force (sub-subdomain enumeration)
-    #[arg(long, default_value = "false")]
-    pub recursive: bool,
-
-    /// Rate limit for CT log requests (requests per second)
-    #[arg(long, default_value = "10")]
-    pub ct_rate_limit: u32,
-
-    /// Enable BBOT enumeration (comprehensive subdomain discovery)
-    #[arg(long, default_value = "false")]
-    pub bbot: bool,
-
-    /// BBOT mode: fast, passive, active, baddns, subdomain-enum
-    #[arg(long, default_value = "fast")]
-    pub bbot_mode: String,
-
-    /// Enable deeper validation for high-confidence findings
-    #[arg(long, default_value = "false")]
-    pub validate: bool,
+/// Build a progress bar with the standard style
+fn make_progress_bar(total: u64, message: &str) -> ProgressBar {
+    let pb = ProgressBar::new(total);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
+            .unwrap()
+            .progress_chars("##-"),
+    );
+    pb.set_message(message.to_string());
+    pb
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -157,13 +97,13 @@ pub struct Cli {
     #[arg(short, long, default_value = "results.json")]
     pub output: PathBuf,
 
-    /// Enable CT log enumeration
-    #[arg(long, default_value = "true")]
-    pub ct_logs: bool,
+    /// Disable CT log enumeration
+    #[arg(long)]
+    pub no_ct_logs: bool,
 
-    /// Enable DNS brute force
-    #[arg(long, default_value = "true")]
-    pub brute_force: bool,
+    /// Disable DNS brute force
+    #[arg(long)]
+    pub no_brute_force: bool,
 
     /// Custom wordlist file for DNS brute force
     #[arg(short, long)]
@@ -181,9 +121,9 @@ pub struct Cli {
     #[arg(long, default_value = "10")]
     pub timeout: u64,
 
-    /// Follow HTTP redirects
-    #[arg(long, default_value = "true")]
-    pub follow_redirects: bool,
+    /// Disable following HTTP redirects
+    #[arg(long)]
+    pub no_follow_redirects: bool,
 
     /// Only show vulnerable subdomains
     #[arg(long)]
@@ -252,8 +192,6 @@ pub struct Config {
     pub bbot_mode: String,
     pub validate: bool,
     pub ct_rate_limit: u32,
-    pub dns_semaphore: Arc<Semaphore>,
-    pub http_semaphore: Arc<Semaphore>,
 }
 
 impl From<Cli> for Config {
@@ -261,13 +199,13 @@ impl From<Cli> for Config {
         Self {
             domain: args.domain.unwrap_or_default(),
             output: args.output,
-            ct_logs: args.ct_logs,
-            brute_force: args.brute_force,
+            ct_logs: !args.no_ct_logs,
+            brute_force: !args.no_brute_force,
             wordlist: args.wordlist,
             concurrency: args.concurrency,
             http_concurrency: args.http_concurrency,
             timeout: args.timeout,
-            follow_redirects: args.follow_redirects,
+            follow_redirects: !args.no_follow_redirects,
             only_vulnerable: args.only_vulnerable,
             verbose: args.verbose,
             silent: args.silent,
@@ -279,15 +217,14 @@ impl From<Cli> for Config {
             bbot_mode: args.bbot_mode,
             validate: args.validate,
             ct_rate_limit: args.ct_rate_limit,
-            dns_semaphore: Arc::new(Semaphore::new(args.concurrency)),
-            http_semaphore: Arc::new(Semaphore::new(args.http_concurrency)),
         }
     }
 }
 
 pub async fn run(config: Config) -> Result<()> {
-    // Initialize fingerprints
-    crate::fingerprints::init_providers().ok();
+    // Initialize fingerprints - fail loudly if the embedded provider DB is broken
+    crate::fingerprints::init_providers()
+        .map_err(|e| anyhow::anyhow!("failed to load provider fingerprints: {}", e))?;
     
     use crate::{ct_logs, dns_brute, dns_resolver, output, takeover_check, bbot};
     use std::time::Instant;
@@ -337,8 +274,11 @@ pub async fn run(config: Config) -> Result<()> {
             eprintln!("[+] Generating subdomain permutations...");
         }
         let permuted = dns_brute::generate_permutations(&all_subdomains);
+        // Permutations are mostly dead names - filter them down to the ones
+        // that actually resolve before feeding them into the full resolve phase
+        let permuted = dns_brute::filter_existing(&config, permuted).await?;
         if !config.silent {
-            eprintln!("[+] Generated {} permuted subdomains", permuted.len());
+            eprintln!("[+] {} permuted subdomains exist", permuted.len());
         }
         all_subdomains.extend(permuted);
     }
@@ -360,19 +300,9 @@ pub async fn run(config: Config) -> Result<()> {
     if !config.silent {
         eprintln!("[+] Resolving DNS records and extracting CNAMEs...");
     }
-    
-    // Create progress bar for DNS resolution
-    let multi_progress = MultiProgress::new();
-    let pb_style = ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
-        .unwrap()
-        .progress_chars("##-");
 
     let dns_pb = if !config.silent {
-        let pb = multi_progress.add(ProgressBar::new(all_subdomains.len() as u64));
-        pb.set_style(pb_style.clone());
-        pb.set_message("Resolving DNS");
-        Some(pb)
+        Some(make_progress_bar(all_subdomains.len() as u64, "Resolving DNS"))
     } else {
         None
     };
@@ -392,20 +322,11 @@ pub async fn run(config: Config) -> Result<()> {
         eprintln!("[+] Checking for subdomain takeover vulnerabilities...");
     }
 
-    // Filter subdomains with interesting CNAMEs for progress bar
+    // Filter subdomains with interesting DNS for progress bar
     let interesting_count = resolved.iter().filter(|r| dns_resolver::has_cloud_cname(r)).count() as u64;
-    
-    let multi_progress = MultiProgress::new();
-    let pb_style = ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
-        .unwrap()
-        .progress_chars("##-");
 
     let http_pb = if !config.silent && interesting_count > 0 {
-        let pb = multi_progress.add(ProgressBar::new(interesting_count));
-        pb.set_style(pb_style.clone());
-        pb.set_message("Checking takeovers");
-        Some(pb)
+        Some(make_progress_bar(interesting_count, "Checking takeovers"))
     } else {
         None
     };
@@ -421,8 +342,10 @@ pub async fn run(config: Config) -> Result<()> {
     output::write_results(&config, &results, duration, resolved.len()).await?;
 
     if !config.silent {
+        // Console listing of findings (respects --only-vulnerable)
+        output::print_results(&results, config.only_vulnerable);
         let vulnerable_count = results.iter().filter(|r| r.vulnerable).count();
-        eprintln!("[+] Scan complete. {} vulnerable subdomains found.", vulnerable_count);
+        eprintln!("\n[+] Scan complete. {} vulnerable subdomains found.", vulnerable_count);
         eprintln!("[+] Results written to {}", config.output.display());
     }
 

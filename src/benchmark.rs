@@ -4,13 +4,17 @@ use crate::{Config, BenchmarkCommand};
 use crate::{ct_logs, dns_brute, dns_resolver, takeover_check};
 use anyhow::Result;
 use std::fs;
-use std::sync::Arc;
-use std::time::{Instant};
-use tokio::sync::Semaphore;
-use tracing::{info};
+use std::time::Instant;
+use tracing::info;
 
 /// Run benchmark against a list of subdomains
 pub async fn run_benchmark(cmd: BenchmarkCommand) -> Result<()> {
+    // Initialize provider fingerprints up front (lazy init also works, but this
+    // surfaces a broken providers.json as a clear error instead of silently
+    // running with zero providers)
+    crate::fingerprints::init_providers()
+        .map_err(|e| anyhow::anyhow!("failed to load provider fingerprints: {}", e))?;
+
     let BenchmarkCommand::Run {
         input,
         output,
@@ -22,7 +26,6 @@ pub async fn run_benchmark(cmd: BenchmarkCommand) -> Result<()> {
         max_subdomains,
     } = cmd;
     
-    let _start_time = Instant::now();
     let content = fs::read_to_string(&input)?;
     let subdomains: Vec<String> = content
         .lines()
@@ -60,8 +63,6 @@ pub async fn run_benchmark(cmd: BenchmarkCommand) -> Result<()> {
         bbot_mode: "fast".to_string(),
         validate: false,
         ct_rate_limit: 10,
-        dns_semaphore: Arc::new(Semaphore::new(concurrency)),
-        http_semaphore: Arc::new(Semaphore::new(http_concurrency)),
     };
 
     let start_time = Instant::now();
@@ -108,7 +109,7 @@ pub async fn run_benchmark(cmd: BenchmarkCommand) -> Result<()> {
         total_time_seconds: duration,
         subdomains_per_second,
         vulnerable_found: vulnerable_count,
-        providers_checked: 80,
+        providers_checked: crate::fingerprints::get_all_fingerprints().len(),
         dns_queries: all_subdomains.len() * 6,
         http_requests: results.iter().filter(|r| r.http_status.is_some()).count(),
         memory_peak_mb: get_memory_usage_mb(),

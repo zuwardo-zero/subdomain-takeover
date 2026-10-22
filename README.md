@@ -44,13 +44,16 @@ subtake -d example.com --bbot --bbot-mode fast
 subtake -d example.com --bbot --bbot-mode baddns --permute --recursive --max-subdomains 5000
 
 # CT logs + brute force only
-subtake -d example.com --ct-logs --brute-force
+subtake -d example.com
 
 # Only CT logs, no brute force
 subtake -d example.com --no-brute-force
 
 # Only brute force, no CT logs
 subtake -d example.com --no-ct-logs
+
+# Do not follow HTTP redirects
+subtake -d example.com --no-follow-redirects
 
 # Use custom wordlist
 subtake -d example.com -w /path/to/wordlist.txt
@@ -84,10 +87,10 @@ subtake -d example.com -o my-results.json
 
 | Mode | Description | Best For |
 |------|-------------|----------|
-| `fast` | Fast scan, no extra discovery | Quick reconnaissance |
+| `fast` | Passive subdomain-enum modules (quick) | Quick reconnaissance |
 | `passive` | Passive modules only (no active connections) | Stealth enumeration |
-| `active` | Active modules + connections | Comprehensive discovery |
-| `baddns` | Subdomain takeover detection modules | Takeover hunting |
+| `active` | Active + passive subdomain-enum modules | Comprehensive discovery |
+| `baddns` | Subdomain takeover detection modules (`baddns-heavy`) | Takeover hunting |
 | `subdomain-enum` | Comprehensive subdomain enumeration | Maximum coverage |
 
 ## 📊 Output Formats
@@ -251,6 +254,10 @@ pip install bbot
 - Concurrent DNS resolution (default 100)
 - Concurrent HTTP checks (default 50)
 - Async/await with tokio for efficient I/O
+- Wildcard DNS detected and filtered during brute force and resolution
+- Permutation candidates pre-filtered with a fast DNS existence check
+- Single HTTP request per subdomain (shared across all provider signature checks)
+- Response bodies read with a hard 100 KB cap
 - Progress bars with real-time counters
 - Optimized release builds with LTO (Link Time Optimization)
 - Release binary at `target/release/subtake`

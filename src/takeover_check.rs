@@ -66,34 +66,11 @@ pub async fn check_all_with_progress(
     Ok(result)
 }
 
+/// A record is worth checking when it points at a known provider (via CNAME,
+/// A/AAAA ranges, or a dangling/NS-based match). Delegates to the resolver
+/// module so the progress-bar count and the actual filter can never drift.
 fn has_interesting_dns(record: &Subdomain) -> bool {
-    // Check CNAME records
-    for cname in &record.cname_records {
-        let matches = match_cname(cname);
-        if !matches.is_empty() {
-            return true;
-        }
-    }
-    
-    // Check A/AAAA records
-    let all_ips: Vec<std::net::IpAddr> = record.a_records.iter()
-        .chain(record.aaaa_records.iter())
-        .cloned()
-        .collect();
-    if !all_ips.is_empty() {
-        let a_matches = crate::fingerprints::match_a_records(&all_ips);
-        if !a_matches.is_empty() {
-            return true;
-        }
-    }
-    
-    // Check NXDOMAIN
-    let nxdomain_matches = check_nxdomain(record);
-    if !nxdomain_matches.is_empty() {
-        return true;
-    }
-    
-    false
+    crate::dns_resolver::has_cloud_cname(record)
 }
 
 fn build_http_client(config: &Config) -> Result<Client> {
@@ -123,90 +100,94 @@ async fn check_subdomain(
     let mut provider: Option<crate::models::CloudProvider> = None;
     let mut service_name: Option<String> = None;
     let mut matched_cname: Option<String> = None;
-    let mut http_status: Option<u16> = None;
-    let mut http_body_snippet: Option<String> = None;
 
-    // Check CNAME records
+    // ---- Collect provider matches up front (no HTTP requests yet) ----
+
+    // CNAME matches: (cname, provider, service_name)
+    let mut cname_matches: Vec<(String, crate::models::CloudProvider, String)> = Vec::new();
     for cname in &record.cname_records {
-        let matches = match_cname(cname);
-        for (prov, svc_name) in matches {
-            let prov = prov.clone();
+        for (prov, svc_name) in match_cname(cname) {
+            cname_matches.push((cname.clone(), prov, svc_name));
+        }
+    }
+
+    // A/AAAA matches
+    let all_ips: Vec<std::net::IpAddr> = record
+        .a_records
+        .iter()
+        .chain(record.aaaa_records.iter())
+        .cloned()
+        .collect();
+    let a_matches = if all_ips.is_empty() {
+        Vec::new()
+    } else {
+        crate::fingerprints::match_a_records(&all_ips)
+    };
+
+    // Dangling CNAME / NS-based takeover matches
+    let nxdomain_matches = check_nxdomain(record);
+
+    // ---- Single HTTP fetch, reused by every signature check ----
+    let has_dns_records = !record.cname_records.is_empty()
+        || !record.a_records.is_empty()
+        || !record.aaaa_records.is_empty();
+    let (http_status, http_body_snippet, headers) =
+        if !cname_matches.is_empty() || !a_matches.is_empty() || has_dns_records {
+            fetch_http(client, config, &record.name).await
+        } else {
+            (None, None, HashMap::new())
+        };
+    let status_code = http_status.unwrap_or(0);
+    let body = http_body_snippet.clone().unwrap_or_default();
+
+    // ---- CNAME-based signature checks ----
+    for (cname, prov, svc_name) in &cname_matches {
+        if provider.is_none() {
             provider = Some(prov.clone());
-            service_name = Some(svc_name.to_string());
+            service_name = Some(svc_name.clone());
             matched_cname = Some(cname.clone());
+        }
 
-            // Try HTTP check for this CNAME target
-            let (status, body, headers) = fetch_http(client, config, &record.name).await;
-            http_status = status;
-            http_body_snippet = body.clone();
+        let sig_results = check_takeover_signatures(prov, status_code, &body, &headers);
+        for (p, confidence, desc) in sig_results {
+            fingerprints.push(FingerprintMatch {
+                provider: p,
+                service_name: svc_name.clone(),
+                cname: cname.clone(),
+                evidence: vec![desc],
+                confidence,
+            });
 
-            // Check for takeover signatures
-            let sig_results = check_takeover_signatures(
-                &prov,
-                status.unwrap_or(0),
-                &body.unwrap_or_default(),
-                &headers,
-            );
-
-            for (p, confidence, desc) in sig_results {
-                fingerprints.push(FingerprintMatch {
-                    provider: p,
-                    service_name: svc_name.to_string(),
-                    cname: cname.clone(),
-                    evidence: vec![desc],
-                    confidence,
-                });
-
-                if confidence == ConfidenceLevel::High {
-                    vulnerable = true;
-                }
+            if confidence == ConfidenceLevel::High {
+                vulnerable = true;
             }
         }
     }
 
-    // Check A/AAAA records
-    let all_ips: Vec<std::net::IpAddr> = record.a_records.iter()
-        .chain(record.aaaa_records.iter())
-        .cloned()
-        .collect();
-    if !all_ips.is_empty() {
-        let a_matches = crate::fingerprints::match_a_records(&all_ips);
-        for (prov, svc_name, evidence) in a_matches {
-                    let prov = prov.clone();
-                    if provider.is_none() {
-                        provider = Some(prov.clone());
-                        service_name = Some(svc_name.to_string());
-                    }
-            
-                    let (status, body, headers) = fetch_http(client, config, &record.name).await;
-                    http_status = status;
-                    http_body_snippet = body.clone();
+    // ---- A/AAAA-based signature checks ----
+    for (prov, svc_name, evidence) in &a_matches {
+        if provider.is_none() {
+            provider = Some(prov.clone());
+            service_name = Some(svc_name.clone());
+        }
 
-                    let sig_results = check_takeover_signatures(
-                        &prov,
-                        status.unwrap_or(0),
-                        &body.unwrap_or_default(),
-                        &headers,
-                    );
+        let sig_results = check_takeover_signatures(prov, status_code, &body, &headers);
+        for (p, confidence, _desc) in sig_results {
+            fingerprints.push(FingerprintMatch {
+                provider: p,
+                service_name: svc_name.clone(),
+                cname: "A/AAAA record".to_string(),
+                evidence: vec![evidence.clone()],
+                confidence,
+            });
 
-                    for (p, confidence, _desc) in sig_results {
-                        fingerprints.push(FingerprintMatch {
-                            provider: p,
-                            service_name: svc_name.to_string(),
-                            cname: "A/AAAA record".to_string(),
-                            evidence: vec![evidence.clone()],
-                            confidence,
-                        });
-
-                        if confidence == ConfidenceLevel::High {
-                            vulnerable = true;
-                        }
-                    }
-                }
+            if confidence == ConfidenceLevel::High {
+                vulnerable = true;
+            }
+        }
     }
 
-    // Check dangling CNAMEs / NS-based takeover
-    let nxdomain_matches = check_nxdomain(record);
+    // ---- Dangling CNAME / NS-based takeover checks ----
     for (prov, svc_name) in nxdomain_matches {
         let prov = prov.clone();
         if provider.is_none() {
@@ -258,17 +239,17 @@ async fn check_subdomain(
     }
 
     // If no specific provider matched but we have DNS records, do generic check
-    if !vulnerable && provider.is_none() && (!record.cname_records.is_empty() || !record.a_records.is_empty() || !record.aaaa_records.is_empty()) {
-        let (status, body, _headers) = fetch_http(client, config, &record.name).await;
-        http_status = status;
-        http_body_snippet = body.clone();
-
+    // (reuses the HTTP fetch performed above)
+    if !vulnerable && provider.is_none() && has_dns_records {
         // Check against all fingerprints generically
         for fp in get_all_fingerprints() {
             for sig in &fp.takeover_signatures {
-                if sig.status_codes.contains(&status.unwrap_or(0)) || sig.status_codes.is_empty() {
+                if sig.body_patterns.is_empty() {
+                    continue;
+                }
+                if sig.status_codes.contains(&status_code) || sig.status_codes.is_empty() {
                     for pattern in &sig.body_patterns {
-                        if body.as_ref().is_some_and(|b| b.to_lowercase().contains(&pattern.to_lowercase())) {
+                        if body.to_lowercase().contains(&pattern.to_lowercase()) {
                             vulnerable = true;
                             provider = Some(crate::models::CloudProvider::new(fp.id.clone(), fp.name.clone()));
                             service_name = Some(fp.name.to_string());
@@ -342,18 +323,9 @@ async fn fetch_http(
                     .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
                     .collect();
 
-                // Read body with size limit
-                let body = match response.text().await {
-                    Ok(text) => {
-                        let snippet = if text.len() > 5000 {
-                            text[..5000].to_string()
-                        } else {
-                            text
-                        };
-                        Some(snippet)
-                    }
-                    Err(_) => None,
-                };
+                // Read the body incrementally with a hard cap so a huge
+                // response cannot exhaust memory (response.text() reads it all)
+                let body = read_body_limited(response, 100_000).await;
 
                 return (Some(status), body, headers);
             }
@@ -364,4 +336,23 @@ async fn fetch_http(
     }
 
     (None, None, HashMap::new())
+}
+
+/// Read at most `limit` bytes of a response body, returning a truncated
+/// UTF-8 snippet (never splitting a multi-byte character).
+async fn read_body_limited(mut response: reqwest::Response, limit: usize) -> Option<String> {
+    let mut buf: Vec<u8> = Vec::with_capacity(8192);
+    while let Ok(Some(chunk)) = response.chunk().await {
+        buf.extend_from_slice(&chunk);
+        if buf.len() >= limit {
+            break;
+        }
+    }
+
+    if buf.is_empty() {
+        return None;
+    }
+
+    let text = String::from_utf8_lossy(&buf);
+    Some(crate::safe_truncate(&text, 5000).to_string())
 }

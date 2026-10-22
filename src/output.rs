@@ -81,7 +81,7 @@ async fn write_summary(config: &Config, results: &ScanResults) -> Result<()> {
 
                 if let Some(body) = &result.http_body_snippet {
                     let snippet = if body.len() > 200 {
-                        format!("{}...", &body[..200])
+                        format!("{}...", crate::safe_truncate(body, 200))
                     } else {
                         body.clone()
                     };
@@ -217,6 +217,6 @@ pub fn print_results(results: &[TakeoverResult], only_vulnerable: bool) {
 
     let vulnerable_count = results.iter().filter(|r| r.vulnerable).count();
     println!("\n=== Summary ===");
-    println!("Total checked: {}", results.len());
+    println!("Subdomains with provider matches: {}", results.len());
     println!("Vulnerable: {}", vulnerable_count);
 }

@@ -38,10 +38,21 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
         Err(e) => warn!("crt.sh query failed (continuing with other sources): {}", e),
     }
 
+    // Pace requests between CT sources according to the configured rate limit
+    if config.ct_rate_limit > 0 {
+        let delay = Duration::from_millis((1000 / config.ct_rate_limit as u64).max(100));
+        tokio::time::sleep(delay).await;
+    }
+
     // Secondary source: CertSpotter
     match query_certspotter(&client, &config.domain).await {
         Ok(subs) => subdomains.extend(subs),
         Err(e) => warn!("CertSpotter query failed (continuing): {}", e),
+    }
+
+    if config.ct_rate_limit > 0 {
+        let delay = Duration::from_millis((1000 / config.ct_rate_limit as u64).max(100));
+        tokio::time::sleep(delay).await;
     }
 
     // Tertiary source: URLScan.io
