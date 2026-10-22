@@ -73,21 +73,29 @@ pub async fn resolve_all_with_progress(
     Ok(result)
 }
 
-/// Detect wildcard DNS by querying random non-existent subdomains
-async fn detect_wildcard(resolver: &Arc<TokioAsyncResolver>, domain: &str) -> Vec<std::net::IpAddr> {
+/// Detect wildcard DNS by querying random non-existent subdomains.
+/// Probes run concurrently so detection adds minimal latency.
+pub async fn detect_wildcard(resolver: &Arc<TokioAsyncResolver>, domain: &str) -> Vec<std::net::IpAddr> {
     use rand::Rng;
     use std::collections::HashSet;
 
-    let mut wildcard_ips = HashSet::new();
-    let mut rng = rand::thread_rng();
-
-    // Query 5 random subdomains that are unlikely to exist
+    let mut probes = tokio::task::JoinSet::new();
     for _ in 0..5 {
-        let random_sub = format!("{}.{}", rng.gen::<u64>(), domain);
-        if let Ok(lookup) = resolver.lookup_ip(&random_sub).await {
-            for ip in lookup.iter() {
-                wildcard_ips.insert(ip);
-            }
+        let resolver = resolver.clone();
+        let random_sub = format!("{}.{}", rand::thread_rng().gen::<u64>(), domain);
+        probes.spawn(async move {
+            resolver
+                .lookup_ip(&random_sub)
+                .await
+                .map(|lookup| lookup.iter().collect::<Vec<std::net::IpAddr>>())
+                .unwrap_or_default()
+        });
+    }
+
+    let mut wildcard_ips = HashSet::new();
+    while let Some(result) = probes.join_next().await {
+        if let Ok(ips) = result {
+            wildcard_ips.extend(ips);
         }
     }
 
@@ -109,7 +117,6 @@ fn build_resolver(config: &Config) -> Result<Arc<TokioAsyncResolver>> {
             tls_dns_name: None,
             trust_negative_responses: false,
             bind_addr: None,
-            tls_config: None,
         };
         ResolverConfig::from_parts(None, vec![], vec![ns_config])
     } else {
@@ -140,8 +147,18 @@ async fn resolve_subdomain(
         dangling_cnames: Vec::new(),
     };
 
-    // Resolve A records
-    if let Ok(lookup) = resolver.lookup_ip(subdomain).await {
+    // Run the independent record lookups concurrently - cuts per-subdomain
+    // latency from the sum of all queries to the slowest single query
+    let (ip_result, cname_result, txt_result, ns_result, mx_result) = tokio::join!(
+        resolver.lookup_ip(subdomain),
+        resolver.lookup(subdomain, RecordType::CNAME),
+        resolver.lookup(subdomain, RecordType::TXT),
+        resolver.lookup(subdomain, RecordType::NS),
+        resolver.lookup(subdomain, RecordType::MX),
+    );
+
+    // A / AAAA records
+    if let Ok(lookup) = ip_result {
         for ip in lookup.iter() {
             // Skip wildcard responses
             if wildcard_ips.contains(&ip) {
@@ -155,8 +172,8 @@ async fn resolve_subdomain(
         }
     }
 
-    // Resolve CNAME records
-    if let Ok(response) = resolver.lookup(subdomain, RecordType::CNAME).await {
+    // CNAME records
+    if let Ok(response) = cname_result {
         for record_data in response.records() {
             if let Some(RData::CNAME(cname)) = record_data.data() {
                 record.cname_records.push(cname.to_string());
@@ -164,8 +181,8 @@ async fn resolve_subdomain(
         }
     }
 
-    // Resolve TXT records
-    if let Ok(response) = resolver.lookup(subdomain, RecordType::TXT).await {
+    // TXT records
+    if let Ok(response) = txt_result {
         for record_data in response.records() {
             if let Some(RData::TXT(txt)) = record_data.data() {
                 for txt_data in txt.iter() {
@@ -175,8 +192,8 @@ async fn resolve_subdomain(
         }
     }
 
-    // Resolve NS records
-    if let Ok(response) = resolver.lookup(subdomain, RecordType::NS).await {
+    // NS records
+    if let Ok(response) = ns_result {
         for record_data in response.records() {
             if let Some(RData::NS(ns)) = record_data.data() {
                 record.ns_records.push(ns.to_string());
@@ -184,8 +201,8 @@ async fn resolve_subdomain(
         }
     }
 
-    // Resolve MX records
-    if let Ok(response) = resolver.lookup(subdomain, RecordType::MX).await {
+    // MX records
+    if let Ok(response) = mx_result {
         for record_data in response.records() {
             if let Some(RData::MX(mx)) = record_data.data() {
                 record.mx_records.push(format!("{} {}", mx.preference(), mx.exchange()));
@@ -249,7 +266,8 @@ async fn resolve_subdomain(
     Ok(record)
 }
 
-/// Check if a subdomain has a CNAME pointing to a known cloud provider
+/// Check if a subdomain has a CNAME pointing to a known cloud provider,
+/// A/AAAA records inside a provider's IP ranges, or a dangling/NS-based match
 pub fn has_cloud_cname(record: &Subdomain) -> bool {
     use crate::fingerprints::{match_cname, match_a_records, check_nxdomain};
     
@@ -273,18 +291,13 @@ pub fn has_cloud_cname(record: &Subdomain) -> bool {
         }
     }
     
-    // Check NXDOMAIN
+    // Check dangling CNAMEs / NS-based takeover
     let nxdomain_matches = check_nxdomain(record);
     if !nxdomain_matches.is_empty() {
         return true;
     }
     
     false
-}
-
-/// Get all CNAME targets for a subdomain
-pub fn get_cname_chain(record: &Subdomain) -> Vec<String> {
-    record.cname_records.clone()
 }
 
 #[cfg(test)]
@@ -314,8 +327,6 @@ mod tests {
             bbot_mode: "fast".to_string(),
             validate: false,
             ct_rate_limit: 10,
-            dns_semaphore: Arc::new(Semaphore::new(100)),
-            http_semaphore: Arc::new(Semaphore::new(50)),
         };
 
         let resolver = build_resolver(&config);

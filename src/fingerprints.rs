@@ -13,20 +13,37 @@ static PROVIDERS: OnceLock<Vec<ProviderFingerprint>> = OnceLock::new();
 static PROVIDER_MAP: OnceLock<HashMap<String, ProviderFingerprint>> = OnceLock::new();
 static IP_RANGES: OnceLock<Vec<crate::models::IpRange>> = OnceLock::new();
 
-/// Initialize providers from embedded JSON file
-pub fn init_providers() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// Parse the embedded providers.json into provider fingerprints.
+///
+/// NOTE: this is a pure function on purpose. Never call `init_providers()`
+/// (or any `OnceLock::set`) from inside a `get_or_init` closure on the same
+/// lock - re-entering `Once` deadlocks.
+fn load_providers() -> Result<Vec<ProviderFingerprint>, Box<dyn std::error::Error + Send + Sync>> {
     let data = include_str!("../data/providers.json");
     let providers: serde_json::Value = serde_json::from_str(data)?;
-    
-    let providers_vec = providers["providers"].as_array()
+
+    let providers_vec = providers["providers"]
+        .as_array()
         .ok_or("Invalid providers format")?
         .iter()
         .map(|v| serde_json::from_value::<crate::models::ProviderFingerprint>(v.clone()))
         .collect::<Result<Vec<_>, _>>()?;
-    
-    // Build IP ranges for A/AAAA record matching
+
+    Ok(providers_vec)
+}
+
+/// Build the provider lookup map
+fn build_provider_map(providers: &[ProviderFingerprint]) -> HashMap<String, ProviderFingerprint> {
+    providers
+        .iter()
+        .map(|p| (p.id.clone(), p.clone()))
+        .collect()
+}
+
+/// Build IP ranges (CIDR list) for A/AAAA record matching
+fn build_ip_ranges(providers: &[ProviderFingerprint]) -> Vec<crate::models::IpRange> {
     let mut ip_ranges = Vec::new();
-    for provider in &providers_vec {
+    for provider in providers {
         for pattern in &provider.a_record_patterns {
             if pattern.contains('/') {
                 // CIDR notation
@@ -50,41 +67,32 @@ pub fn init_providers() -> Result<(), Box<dyn std::error::Error + Send + Sync>> 
             }
         }
     }
-    
-    // Build provider map for quick lookup
-    let mut provider_map = HashMap::new();
-    for provider in &providers_vec {
-        provider_map.insert(provider.id.clone(), provider.clone());
-    }
-    
+    ip_ranges
+}
+
+/// Initialize providers from embedded JSON file
+pub fn init_providers() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let providers_vec = load_providers()?;
+    let provider_map = build_provider_map(&providers_vec);
+    let ip_ranges = build_ip_ranges(&providers_vec);
+
     let _ = PROVIDERS.set(providers_vec);
     let _ = PROVIDER_MAP.set(provider_map);
     let _ = IP_RANGES.set(ip_ranges);
-    
+
     Ok(())
 }
 
-/// Get all provider fingerprints
+/// Get all provider fingerprints (lazily loads from the embedded JSON)
 pub fn get_all_fingerprints() -> &'static Vec<ProviderFingerprint> {
-    PROVIDERS.get_or_init(|| {
-        // Fallback: try to load from file
-        init_providers().ok();
-        PROVIDERS.get().cloned().unwrap_or_default()
-    })
+    PROVIDERS.get_or_init(|| load_providers().unwrap_or_default())
 }
 
 /// Get provider by ID
 pub fn get_provider(id: &str) -> Option<&'static ProviderFingerprint> {
-    PROVIDER_MAP.get_or_init(|| {
-        let _ = init_providers();
-        let mut map = HashMap::new();
-        if let Some(providers) = PROVIDERS.get() {
-            for p in providers {
-                map.insert(p.id.clone(), p.clone());
-            }
-        }
-        map
-    }).get(id)
+    PROVIDER_MAP
+        .get_or_init(|| build_provider_map(get_all_fingerprints()))
+        .get(id)
 }
 
 /// Match a CNAME against known cloud provider patterns
@@ -111,10 +119,7 @@ pub fn match_cname(cname: &str) -> Vec<(CloudProvider, String)> {
 
 /// Match A/AAAA records against known provider IP ranges
 pub fn match_a_records(ips: &[IpAddr]) -> Vec<(CloudProvider, String, String)> {
-    let ip_ranges = IP_RANGES.get_or_init(|| {
-        let _ = init_providers();
-        IP_RANGES.get().cloned().unwrap_or_default()
-    });
+    let ip_ranges = IP_RANGES.get_or_init(|| build_ip_ranges(get_all_fingerprints()));
     
     let mut matches = Vec::new();
     
@@ -161,12 +166,21 @@ fn ip_in_cidr(ip: &str, cidr: &str) -> bool {
     
     match (ip, network_ip) {
         (IpAddr::V4(ip), IpAddr::V4(network)) => {
+            if prefix_len == 0 {
+                return true; // /0 matches everything
+            }
+            if prefix_len > 32 {
+                return false;
+            }
             let mask = if prefix_len >= 32 { u32::MAX } else { !0u32 << (32 - prefix_len) };
             let ip_u32 = u32::from(ip);
             let network_u32 = u32::from(network);
             (ip_u32 & mask) == (network_u32 & mask)
         }
         (IpAddr::V6(ip), IpAddr::V6(network)) => {
+            if prefix_len > 128 {
+                return false;
+            }
             let ip_segments = ip.segments();
             let network_segments = network.segments();
             let full_bits = prefix_len as usize;
@@ -284,72 +298,6 @@ pub fn check_takeover_signatures(
                 }
             }
         }
-    }
-    
-    results
-}
-
-/// Quick check for common takeover patterns without full HTTP request
-pub fn quick_cname_check(record: &Subdomain) -> Vec<(CloudProvider, ConfidenceLevel, String)> {
-    let mut results = Vec::new();
-
-    for cname in &record.cname_records {
-        let matches = match_cname(cname);
-        for (provider, service_name) in matches {
-            let fp = get_provider(provider.as_str());
-            let confidence = fp.map(|fp| match fp.confidence.as_str() {
-                "High" => ConfidenceLevel::High,
-                "Medium" => ConfidenceLevel::Medium,
-                _ => ConfidenceLevel::Low,
-            }).unwrap_or(ConfidenceLevel::Low);
-            
-            results.push((
-                provider,
-                confidence,
-                format!("CNAME points to {}", service_name)
-            ));
-        }
-    }
-    
-    // Also check A/AAAA records
-    let all_ips: Vec<IpAddr> = record.a_records.iter()
-        .chain(record.aaaa_records.iter())
-        .cloned()
-        .collect();
-    
-    if !all_ips.is_empty() {
-        let a_matches = match_a_records(&all_ips);
-        for (provider, _service_name, evidence) in a_matches {
-            let fp = get_provider(provider.as_str());
-            let confidence = fp.map(|fp| match fp.confidence.as_str() {
-                "High" => ConfidenceLevel::High,
-                "Medium" => ConfidenceLevel::Medium,
-                _ => ConfidenceLevel::Low,
-            }).unwrap_or(ConfidenceLevel::Low);
-            
-            results.push((
-                provider,
-                confidence,
-                evidence
-            ));
-        }
-    }
-    
-    // Check dangling CNAMEs / NS-based takeover
-    let nxdomain_matches = check_nxdomain(record);
-    for (provider, service_name) in nxdomain_matches {
-        let fp = get_provider(provider.as_str());
-        let confidence = fp.map(|fp| match fp.confidence.as_str() {
-            "High" => ConfidenceLevel::High,
-            "Medium" => ConfidenceLevel::Medium,
-            _ => ConfidenceLevel::Low,
-        }).unwrap_or(ConfidenceLevel::Low);
-        
-        results.push((
-            provider,
-            confidence,
-            format!("Dangling record - {} resource no longer exists", service_name)
-        ));
     }
     
     results
@@ -482,5 +430,14 @@ mod tests {
         let prov = CloudProvider::new("aws_elastic_beanstalk".to_string(), "AWS Elastic Beanstalk".to_string());
         let results = check_takeover_signatures(&prov, 200, "<html>healthy app</html>", &HashMap::new());
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_lazy_loading_without_init() {
+        // get_all_fingerprints() must work without an explicit init_providers()
+        // call and must never deadlock (regression: re-entrant OnceLock init)
+        let fps = get_all_fingerprints();
+        assert!(fps.len() > 50, "providers should load lazily, got {}", fps.len());
+        assert!(get_provider("heroku").is_some(), "provider map should load lazily");
     }
 }

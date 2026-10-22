@@ -17,6 +17,16 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
     // Build resolver once (respects custom resolver config)
     let resolver = Arc::new(build_brute_resolver(config)?);
 
+    // Detect wildcard DNS so brute-force noise (*.domain resolving for every
+    // word) is filtered instead of producing thousands of fake hits
+    let wildcard_ips = crate::dns_resolver::detect_wildcard(&resolver, &config.domain).await;
+    if !wildcard_ips.is_empty() && !config.silent {
+        eprintln!(
+            "[!] Wildcard DNS detected for {} - brute force results filtered",
+            config.domain
+        );
+    }
+
     let subdomains = Arc::new(DashSet::new());
     let semaphore = Arc::new(Semaphore::new(config.concurrency));
 
@@ -32,13 +42,14 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
         let subdomains = subdomains.clone();
         let semaphore = semaphore.clone();
         let resolver = resolver.clone();
+        let wildcard_ips = wildcard_ips.clone();
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
             let subdomain = format!("{}.{}", word, domain);
 
             // Quick DNS check - if it resolves, it exists
-            if check_dns_exists(&resolver, &subdomain).await {
+            if check_dns_exists(&resolver, &subdomain, &wildcard_ips).await {
                 subdomains.insert(subdomain);
             }
         });
@@ -63,7 +74,8 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
     // Recursive brute force: if enabled, try sub-subdomains for each found subdomain
     if config.recursive && !result.is_empty() {
         info!("Recursive brute force enabled, enumerating sub-subdomains...");
-        let recursive_subdomains = enumerate_recursive(config, &result, &resolver).await?;
+        let recursive_subdomains =
+            enumerate_recursive(config, &result, &resolver, &wildcard_ips).await?;
         result.extend(recursive_subdomains);
         result.sort();
         result.dedup();
@@ -75,6 +87,45 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
     }
 
     debug!("DNS brute force found {} subdomains", result.len());
+    Ok(result)
+}
+
+/// Filter a list of candidate subdomains down to the ones that actually resolve.
+/// Used to prune permutation lists before the full resolve phase.
+pub async fn filter_existing(config: &Config, candidates: Vec<String>) -> Result<Vec<String>> {
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let resolver = Arc::new(build_brute_resolver(config)?);
+    let wildcard_ips = crate::dns_resolver::detect_wildcard(&resolver, &config.domain).await;
+
+    let existing = Arc::new(DashSet::new());
+    let semaphore = Arc::new(Semaphore::new(config.concurrency));
+    let mut tasks = Vec::new();
+
+    for candidate in candidates {
+        let resolver = resolver.clone();
+        let semaphore = semaphore.clone();
+        let existing = existing.clone();
+        let wildcard_ips = wildcard_ips.clone();
+
+        let task = tokio::spawn(async move {
+            let _permit = semaphore.acquire().await.unwrap();
+            if check_dns_exists(&resolver, &candidate, &wildcard_ips).await {
+                existing.insert(candidate);
+            }
+        });
+
+        tasks.push(task);
+    }
+
+    for task in tasks {
+        task.await?;
+    }
+
+    let mut result: Vec<String> = existing.iter().map(|s| s.clone()).collect();
+    result.sort();
     Ok(result)
 }
 
@@ -92,7 +143,6 @@ fn build_brute_resolver(config: &Config) -> Result<TokioAsyncResolver> {
             tls_dns_name: None,
             trust_negative_responses: false,
             bind_addr: None,
-            tls_config: None,
         };
         ResolverConfig::from_parts(None, vec![], vec![ns_config])
     } else {
@@ -121,11 +171,27 @@ fn load_wordlist(config: &Config) -> Result<Vec<String>> {
     }
 }
 
-/// Quick DNS existence check using provided resolver
-async fn check_dns_exists(resolver: &Arc<TokioAsyncResolver>, subdomain: &str) -> bool {
+/// Quick DNS existence check using provided resolver.
+/// Returns false when the name does not resolve, or when it only resolves to
+/// wildcard IPs (i.e. it is not a real record).
+async fn check_dns_exists(
+    resolver: &Arc<TokioAsyncResolver>,
+    subdomain: &str,
+    wildcard_ips: &[std::net::IpAddr],
+) -> bool {
     // Try A record lookup
     match resolver.lookup_ip(subdomain).await {
-        Ok(lookup) => lookup.iter().next().is_some(),
+        Ok(lookup) => {
+            let ips: Vec<std::net::IpAddr> = lookup.iter().collect();
+            if ips.is_empty() {
+                return false;
+            }
+            if !wildcard_ips.is_empty() && ips.iter().all(|ip| wildcard_ips.contains(ip)) {
+                // Only wildcard answers - not a real record
+                return false;
+            }
+            true
+        }
         Err(_) => false,
     }
 }
@@ -207,7 +273,12 @@ mod tests {
 
 /// Recursive brute force: enumerate sub-subdomains for each found subdomain
 #[allow(clippy::unnecessary_to_owned)]
-async fn enumerate_recursive(config: &Config, base_subdomains: &[String], resolver: &Arc<TokioAsyncResolver>) -> Result<Vec<String>> {
+async fn enumerate_recursive(
+    config: &Config,
+    base_subdomains: &[String],
+    resolver: &Arc<TokioAsyncResolver>,
+    wildcard_ips: &[std::net::IpAddr],
+) -> Result<Vec<String>> {
     let wordlist = load_wordlist(config)?;
     let wordlist = Arc::new(wordlist); // Share wordlist across tasks
     let subdomains = Arc::new(DashSet::new());
@@ -232,13 +303,14 @@ async fn enumerate_recursive(config: &Config, base_subdomains: &[String], resolv
             let subdomains = subdomains.clone();
             let semaphore = semaphore.clone();
             let resolver = resolver.clone();
+            let wildcard_ips = wildcard_ips.to_vec();
 
             let task = tokio::spawn(async move {
                 let _permit = semaphore.acquire().await.unwrap();
                 let subdomain = format!("{}.{}.{}", word, subdomain_part, domain);
 
                 // Quick DNS check - if it resolves, it exists
-                if check_dns_exists(&resolver, &subdomain).await {
+                if check_dns_exists(&resolver, &subdomain, &wildcard_ips).await {
                     subdomains.insert(subdomain);
                 }
             });
