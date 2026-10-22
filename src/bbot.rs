@@ -100,27 +100,26 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
         if !line.starts_with('{') {
             continue;
         }
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
-            if let Some(event_type) = json.get("type").and_then(|v| v.as_str()) {
-                let is_dns_event = matches!(
-                    event_type,
-                    "DNS_NAME" | "DNS_NAME_UNRESOLVED" | "SUBDOMAIN" | "dns" | "subdomain"
-                );
-                if is_dns_event {
-                    // Prefer `host`, fall back to `data` (BBOT 3.x event schema)
-                    let host = json
-                        .get("host")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| json.get("data").and_then(|v| v.as_str()))
-                        .or_else(|| json.get("subdomain").and_then(|v| v.as_str()));
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(line)
+            && let Some(event_type) = json.get("type").and_then(|v| v.as_str())
+        {
+            let is_dns_event = matches!(
+                event_type,
+                "DNS_NAME" | "DNS_NAME_UNRESOLVED" | "SUBDOMAIN" | "dns" | "subdomain"
+            );
+            if is_dns_event {
+                // Prefer `host`, fall back to `data` (BBOT 3.x event schema)
+                let host = json
+                    .get("host")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| json.get("data").and_then(|v| v.as_str()))
+                    .or_else(|| json.get("subdomain").and_then(|v| v.as_str()));
 
-                    if let Some(host) = host {
-                        if let Some(clean) = sanitize_host(host) {
-                            if is_subdomain_of(&clean, &config.domain) {
-                                subdomains.insert(clean);
-                            }
-                        }
-                    }
+                if let Some(host) = host
+                    && let Some(clean) = sanitize_host(host)
+                    && is_subdomain_of(&clean, &config.domain)
+                {
+                    subdomains.insert(clean);
                 }
             }
         }

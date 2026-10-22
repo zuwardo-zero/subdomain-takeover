@@ -76,13 +76,12 @@ pub async fn resolve_all_with_progress(
 /// Detect wildcard DNS by querying random non-existent subdomains.
 /// Probes run concurrently so detection adds minimal latency.
 pub async fn detect_wildcard(resolver: &Arc<TokioAsyncResolver>, domain: &str) -> Vec<std::net::IpAddr> {
-    use rand::Rng;
     use std::collections::HashSet;
 
     let mut probes = tokio::task::JoinSet::new();
     for _ in 0..5 {
         let resolver = resolver.clone();
-        let random_sub = format!("{}.{}", rand::thread_rng().gen::<u64>(), domain);
+        let random_sub = format!("{}.{}", rand::random::<u64>(), domain);
         probes.spawn(async move {
             resolver
                 .lookup_ip(&random_sub)
@@ -243,20 +242,20 @@ async fn resolve_subdomain(
     // Detect dangling CNAME: final target no longer resolves (NXDOMAIN).
     // This is the actual subdomain takeover scenario - the CNAME still points
     // at a provider hostname whose resource was deleted.
-    if let Some(last_target) = record.cname_records.last().cloned() {
-        if !last_target.is_empty() {
-            match resolver.lookup_ip(&last_target).await {
-                Ok(_) => {}
-                Err(e) => {
-                    use trust_dns_resolver::error::ResolveErrorKind;
-                    let is_nxdomain = matches!(
-                        e.kind(),
-                        ResolveErrorKind::NoRecordsFound { response_code, .. }
-                            if *response_code == trust_dns_proto::op::ResponseCode::NXDomain
-                    );
-                    if is_nxdomain {
-                        record.dangling_cnames.push(last_target);
-                    }
+    if let Some(last_target) = record.cname_records.last().cloned()
+        && !last_target.is_empty()
+    {
+        match resolver.lookup_ip(&last_target).await {
+            Ok(_) => {}
+            Err(e) => {
+                use trust_dns_resolver::error::ResolveErrorKind;
+                let is_nxdomain = matches!(
+                    e.kind(),
+                    ResolveErrorKind::NoRecordsFound { response_code, .. }
+                        if *response_code == trust_dns_proto::op::ResponseCode::NXDomain
+                );
+                if is_nxdomain {
+                    record.dangling_cnames.push(last_target);
                 }
             }
         }
