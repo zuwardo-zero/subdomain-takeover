@@ -192,27 +192,58 @@ fn ip_in_cidr(ip: &str, cidr: &str) -> bool {
     }
 }
 
-/// Check for NXDOMAIN (non-existent domain)
+/// Detect genuinely dangling DNS resources that enable takeover:
+///
+/// - **Dangling CNAME**: a CNAME still points at a provider hostname, but the
+///   target no longer resolves (NXDOMAIN). The provider resource was deleted
+///   and can likely be re-registered by an attacker.
+/// - **NS-based takeover**: NS records point at a provider's nameservers but
+///   the zone has no records there (e.g. DigitalOcean).
+///
+/// A subdomain that simply does not exist (NXDOMAIN with no CNAME, A, NS or
+/// MX records) is **not** vulnerable - there is nothing dangling to claim.
 pub fn check_nxdomain(record: &Subdomain) -> Vec<(CloudProvider, String)> {
     let mut matches = Vec::new();
-    
-    // If no DNS records at all, check for NXDOMAIN-based providers
-    if record.a_records.is_empty() 
-        && record.aaaa_records.is_empty() 
-        && record.cname_records.is_empty()
-        && record.ns_records.is_empty()
-        && record.mx_records.is_empty() {
-        
-        for fp in get_all_fingerprints() {
-            if fp.nxdomain {
+
+    for fp in get_all_fingerprints() {
+        // Dangling CNAME pointing at this provider
+        if !fp.cname_patterns.is_empty() {
+            let dangling = record.dangling_cnames.iter().any(|cname| {
+                let cname_lower = cname.to_lowercase();
+                fp.cname_patterns
+                    .iter()
+                    .any(|p| cname_lower.contains(&p.to_lowercase()))
+            });
+            if dangling {
                 matches.push((
                     CloudProvider::new(fp.id.clone(), fp.name.clone()),
-                    fp.name.clone()
+                    fp.name.clone(),
+                ));
+                continue;
+            }
+        }
+
+        // NS-based takeover (provider nameservers authoritative but zone empty)
+        if !fp.ns_patterns.is_empty() {
+            let ns_match = record.ns_records.iter().any(|ns| {
+                let ns_lower = ns.to_lowercase();
+                fp.ns_patterns
+                    .iter()
+                    .any(|p| ns_lower.contains(&p.to_lowercase()))
+            });
+            if ns_match
+                && record.a_records.is_empty()
+                && record.cname_records.is_empty()
+                && record.mx_records.is_empty()
+            {
+                matches.push((
+                    CloudProvider::new(fp.id.clone(), fp.name.clone()),
+                    fp.name.clone(),
                 ));
             }
         }
     }
-    
+
     matches
 }
 
@@ -230,6 +261,11 @@ pub fn check_takeover_signatures(
     
     if let Some(fp) = provider_fp {
         for sig in &fp.takeover_signatures {
+            // NXDOMAIN-only signatures carry no HTTP evidence; dangling CNAMEs
+            // are detected during DNS resolution instead (see check_nxdomain).
+            if sig.body_patterns.is_empty() {
+                continue;
+            }
             if sig.status_codes.contains(&status_code) || sig.status_codes.is_empty() {
                 for pattern in &sig.body_patterns {
                     if body.to_lowercase().contains(&pattern.to_lowercase()) {
@@ -245,20 +281,6 @@ pub fn check_takeover_signatures(
                         ));
                         break;
                     }
-                }
-                
-                // Also check for NXDOMAIN signature
-                if sig.nxdomain && sig.body_patterns.is_empty() {
-                    let confidence = match fp.confidence.as_str() {
-                        "High" => ConfidenceLevel::High,
-                        "Medium" => ConfidenceLevel::Medium,
-                        _ => ConfidenceLevel::Low,
-                    };
-                    results.push((
-                        CloudProvider::new(fp.id.clone(), fp.name.clone()),
-                        confidence,
-                        sig.description.clone()
-                    ));
                 }
             }
         }
@@ -313,7 +335,7 @@ pub fn quick_cname_check(record: &Subdomain) -> Vec<(CloudProvider, ConfidenceLe
         }
     }
     
-    // Check NXDOMAIN
+    // Check dangling CNAMEs / NS-based takeover
     let nxdomain_matches = check_nxdomain(record);
     for (provider, service_name) in nxdomain_matches {
         let fp = get_provider(provider.as_str());
@@ -326,7 +348,7 @@ pub fn quick_cname_check(record: &Subdomain) -> Vec<(CloudProvider, ConfidenceLe
         results.push((
             provider,
             confidence,
-            format!("NXDOMAIN - {} claims vulnerable", service_name)
+            format!("Dangling record - {} resource no longer exists", service_name)
         ));
     }
     
@@ -342,51 +364,123 @@ pub async fn validate_claimability(
 ) -> crate::models::ValidationResult {
     let provider_id = provider.as_str();
     let fp = get_provider(provider_id);
-    
+
     let mut details = String::new();
     let mut claimable = None;
-    
+
     if let Some(fp) = fp {
-        // For NXDOMAIN providers, the domain doesn't exist - highly claimable
-        if fp.nxdomain && record.a_records.is_empty() && record.cname_records.is_empty() {
+        // A dangling CNAME to this provider is strong evidence of a claimable resource
+        if let Some(cname) = record.dangling_cnames.iter().find(|cname| {
+            let cname_lower = cname.to_lowercase();
+            fp.cname_patterns
+                .iter()
+                .any(|p| cname_lower.contains(&p.to_lowercase()))
+        }) {
             claimable = Some(true);
-            details = format!("{} reports NXDOMAIN for this service - highly claimable", fp.name);
-        } else {
-            // Check if we have a CNAME pointing to a known vulnerable pattern
-            for cname in &record.cname_records {
-                for pattern in &fp.cname_patterns {
-                    if cname.to_lowercase().contains(&pattern.to_lowercase()) {
-                        details = format!("CNAME {} matches {} pattern: {}", cname, fp.name, pattern);
-                        // Can't definitively prove claimability without auth, but high confidence
-                        claimable = Some(true);
-                        break;
-                    }
-                }
-            }
-            
-            // Check A records against IP ranges
-            if claimable.is_none() {
-                let all_ips: Vec<IpAddr> = record.a_records.iter()
-                    .chain(record.aaaa_records.iter())
-                    .cloned()
-                    .collect();
-                
-                let a_matches = match_a_records(&all_ips);
-                if !a_matches.is_empty() {
-                    claimable = Some(true);
-                    details = format!("A/AAAA records match {} IP ranges", fp.name);
-                }
+            details = format!(
+                "CNAME {} points to {} and the target no longer resolves - resource likely claimable",
+                cname, fp.name
+            );
+        }
+
+        // NS-based takeover (e.g. DigitalOcean): nameservers are the provider's,
+        // but the zone holds no records for this domain
+        if claimable.is_none() && !fp.ns_patterns.is_empty() {
+            let ns_match = record.ns_records.iter().any(|ns| {
+                let ns_lower = ns.to_lowercase();
+                fp.ns_patterns
+                    .iter()
+                    .any(|p| ns_lower.contains(&p.to_lowercase()))
+            });
+            if ns_match
+                && record.a_records.is_empty()
+                && record.cname_records.is_empty()
+                && record.mx_records.is_empty()
+            {
+                claimable = Some(true);
+                details = format!(
+                    "NS records point to {} but the zone has no records - likely claimable",
+                    fp.name
+                );
             }
         }
     }
-    
+
     if details.is_empty() {
         details = "No definitive claimability determination possible without authentication".to_string();
     }
-    
+
     crate::models::ValidationResult {
         claimable,
         details,
         checked_at: chrono::Utc::now().to_rfc3339(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn blank_record(name: &str) -> Subdomain {
+        Subdomain {
+            name: name.to_string(),
+            a_records: vec![],
+            aaaa_records: vec![],
+            cname_records: vec![],
+            txt_records: vec![],
+            ns_records: vec![],
+            mx_records: vec![],
+            dangling_cnames: vec![],
+        }
+    }
+
+    #[test]
+    fn test_dead_subdomain_is_not_vulnerable() {
+        init_providers().ok();
+        // NXDOMAIN with no records at all: nothing dangling, not a takeover
+        let record = blank_record("dead.example.com");
+        assert!(check_nxdomain(&record).is_empty());
+    }
+
+    #[test]
+    fn test_dangling_cname_detected() {
+        init_providers().ok();
+        let mut record = blank_record("dev.example.com");
+        record.cname_records = vec!["dev-example.herokuapp.com".to_string()];
+        record.dangling_cnames = vec!["dev-example.herokuapp.com".to_string()];
+
+        let matches = check_nxdomain(&record);
+        assert!(
+            matches.iter().any(|(p, _)| p.id == "heroku"),
+            "dangling Heroku CNAME should be detected: {:?}",
+            matches.iter().map(|(p, _)| &p.id).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_dangling_unknown_target_ignored() {
+        init_providers().ok();
+        let mut record = blank_record("dev.example.com");
+        record.cname_records = vec!["dev.random-internal-host.example.net".to_string()];
+        record.dangling_cnames = vec!["dev.random-internal-host.example.net".to_string()];
+        assert!(check_nxdomain(&record).is_empty());
+    }
+
+    #[test]
+    fn test_ns_based_digitalocean() {
+        init_providers().ok();
+        let mut record = blank_record("example.com");
+        record.ns_records = vec!["ns1.digitalocean.com".to_string()];
+        let matches = check_nxdomain(&record);
+        assert!(matches.iter().any(|(p, _)| p.id == "digitalocean"));
+    }
+
+    #[test]
+    fn test_healthy_resolution_not_flagged_by_nxdomain_sig() {
+        init_providers().ok();
+        // A provider with an NXDOMAIN-only signature must not fire on HTTP content
+        let prov = CloudProvider::new("aws_elastic_beanstalk".to_string(), "AWS Elastic Beanstalk".to_string());
+        let results = check_takeover_signatures(&prov, 200, "<html>healthy app</html>", &HashMap::new());
+        assert!(results.is_empty());
     }
 }

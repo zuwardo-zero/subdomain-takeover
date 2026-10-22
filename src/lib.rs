@@ -416,19 +416,9 @@ pub async fn run(config: Config) -> Result<()> {
         pb.finish_with_message("Takeover check complete");
     }
 
-    // Phase 5: Optional deeper validation
-    let results = if config.validate {
-        if !config.silent {
-            eprintln!("[+] Running deeper validation for high-confidence findings...");
-        }
-        takeover_check::validate_findings(&config, results).await?
-    } else {
-        results
-    };
-
     // Phase 5: Output
     let duration = start_time.elapsed().as_secs_f64();
-    output::write_results(&config, &results, duration).await?;
+    output::write_results(&config, &results, duration, resolved.len()).await?;
 
     if !config.silent {
         let vulnerable_count = results.iter().filter(|r| r.vulnerable).count();

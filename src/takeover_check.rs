@@ -205,7 +205,7 @@ async fn check_subdomain(
                 }
     }
 
-    // Check NXDOMAIN
+    // Check dangling CNAMEs / NS-based takeover
     let nxdomain_matches = check_nxdomain(record);
     for (prov, svc_name) in nxdomain_matches {
         let prov = prov.clone();
@@ -213,19 +213,42 @@ async fn check_subdomain(
             provider = Some(prov.clone());
             service_name = Some(svc_name.to_string());
         }
-        
+
         let fp = crate::fingerprints::get_provider(prov.as_str());
         let confidence = fp.map(|fp| match fp.confidence.as_str() {
             "High" => ConfidenceLevel::High,
             "Medium" => ConfidenceLevel::Medium,
             _ => ConfidenceLevel::Low,
         }).unwrap_or(ConfidenceLevel::Medium);
-        
+
+        // Identify which dangling CNAME (if any) triggered the match
+        let dangling_cname = fp.and_then(|fp| {
+            record.dangling_cnames.iter().find(|cname| {
+                let cname_lower = cname.to_lowercase();
+                fp.cname_patterns
+                    .iter()
+                    .any(|p| cname_lower.contains(&p.to_lowercase()))
+            })
+        }).cloned();
+
+        let (cname_value, evidence, confidence) = match dangling_cname {
+            Some(cname) => (
+                cname.clone(),
+                format!("Dangling CNAME {} - target no longer resolves", cname),
+                confidence,
+            ),
+            None => (
+                "NS record".to_string(),
+                format!("NS records point to {} but no records exist", svc_name),
+                ConfidenceLevel::Medium,
+            ),
+        };
+
         fingerprints.push(FingerprintMatch {
             provider: prov.clone(),
             service_name: svc_name.to_string(),
-            cname: "NXDOMAIN".to_string(),
-            evidence: vec![format!("NXDOMAIN - {} claims vulnerable", svc_name)],
+            cname: cname_value,
+            evidence: vec![evidence],
             confidence,
         });
 
@@ -273,8 +296,11 @@ async fn check_subdomain(
         provider
     );
 
-    // Run deeper validation if high confidence
-    let validation = if vulnerable && matches!(fingerprints.iter().map(|f| f.confidence).max(), Some(ConfidenceLevel::High)) {
+    // Run deeper validation only when explicitly requested (--validate)
+    let validation = if config.validate
+        && vulnerable
+        && matches!(fingerprints.iter().map(|f| f.confidence).max(), Some(ConfidenceLevel::High))
+    {
         Some(validate_claimability(provider.as_ref().unwrap(), &record.name, record).await)
     } else {
         None
@@ -338,38 +364,4 @@ async fn fetch_http(
     }
 
     (None, None, HashMap::new())
-}
-
-/// Validate high-confidence findings
-pub async fn validate_findings(_config: &Config, results: Vec<crate::models::TakeoverResult>) -> Result<Vec<crate::models::TakeoverResult>> {
-    let mut validated = Vec::new();
-    
-    for mut result in results {
-        if result.vulnerable {
-            if let Some(provider) = &result.provider {
-                let fp = crate::fingerprints::get_provider(provider.as_str());
-                if let Some(fp) = fp {
-                    // Only validate high-confidence findings
-                    if fp.confidence == "High" {
-                        // Create a dummy record for validation
-                        let record = Subdomain {
-                            name: result.subdomain.clone(),
-                            a_records: vec![],
-                            aaaa_records: vec![],
-                            cname_records: result.cname.clone().into_iter().collect(),
-                            txt_records: vec![],
-                            ns_records: vec![],
-                            mx_records: vec![],
-                        };
-                        
-                        let validation = validate_claimability(provider, &result.subdomain, &record).await;
-                        result.validation = Some(validation);
-                    }
-                }
-            }
-        }
-        validated.push(result);
-    }
-    
-    Ok(validated)
 }

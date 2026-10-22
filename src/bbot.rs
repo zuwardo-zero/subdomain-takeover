@@ -3,13 +3,17 @@
 use crate::Config;
 use anyhow::Result;
 use std::collections::HashSet;
-use std::process::Command as StdCommand;
+use std::process::Stdio;
 use std::time::Duration;
+use tokio::process::Command as TokioCommand;
 use tracing::{info, warn};
 
 /// Enumerate subdomains using BBOT
 pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
-    info!("Starting BBOT enumeration for {} (mode: {})", config.domain, config.bbot_mode);
+    info!(
+        "Starting BBOT enumeration for {} (mode: {})",
+        config.domain, config.bbot_mode
+    );
 
     let mut subdomains = HashSet::new();
 
@@ -22,39 +26,43 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
         _ => Duration::from_secs(config.timeout.max(60) * 10), // subdomain-enum default
     };
 
-    // Build BBOT command based on mode
-    let mut cmd = StdCommand::new("bbot");
-    cmd.arg("-t").arg(&config.domain)
-        .arg("--json")                    // JSON output for parsing
-        .arg("--no-color");
+    // Build BBOT command based on mode.
+    // `-y` is required: without it BBOT blocks at the interactive
+    // "Press enter to execute" prompt and is killed on timeout.
+    let mut cmd = TokioCommand::new("bbot");
+    cmd.arg("-t")
+        .arg(&config.domain)
+        .arg("-y")
+        .arg("--json") // JSON events on stdout for parsing
+        .arg("--no-color")
+        .kill_on_drop(true);
 
-    // Select preset based on mode
+    // Select preset/flags based on mode
     match config.bbot_mode.as_str() {
+        // Quick passive subdomain enumeration (the "fast" preset has 0 modules)
         "fast" => {
-            cmd.arg("-p").arg("fast"); // Fast scan - no extra discovery
+            cmd.arg("-f").arg("subdomain-enum").arg("-rf").arg("passive");
         }
         "passive" => {
             cmd.arg("-f").arg("passive"); // Passive modules only
         }
         "active" => {
-            cmd.arg("-f").arg("active"); // Active modules
+            cmd.arg("-f").arg("subdomain-enum"); // Active + passive modules
         }
         "baddns" => {
-            cmd.arg("-p").arg("baddns"); // Subdomain takeover detection
+            cmd.arg("-p").arg("baddns-heavy"); // Subdomain takeover detection modules
         }
         "subdomain-enum" => {
             cmd.arg("-p").arg("subdomain-enum"); // Comprehensive subdomain enum
         }
         _ => {
-            cmd.arg("-p").arg("fast"); // Default to fast
+            cmd.arg("-f").arg("subdomain-enum").arg("-rf").arg("passive");
         }
     }
 
-    // Run with timeout
-    let mut child = match cmd
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn() {
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
             warn!("Failed to spawn BBOT: {}. Is BBOT installed?", e);
@@ -62,59 +70,55 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
         }
     };
 
-    // Wait with timeout
-    let start = std::time::Instant::now();
-    let output = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let stdout = std::io::read_to_string(child.stdout.take().unwrap()).unwrap_or_default();
-                let stderr = std::io::read_to_string(child.stderr.take().unwrap()).unwrap_or_default();
-                break std::process::Output {
-                    status,
-                    stdout: stdout.into_bytes(),
-                    stderr: stderr.into_bytes(),
-                };
-            }
-            Ok(None) => {
-                if start.elapsed() >= timeout {
-                    let _ = child.kill();
-                    let stdout = std::io::read_to_string(child.stdout.take().unwrap()).unwrap_or_default();
-                    let stderr = std::io::read_to_string(child.stderr.take().unwrap()).unwrap_or_default();
-                    // Create a timeout exit status (124 is standard timeout exit code)
-                    break std::process::Output {
-                        status: std::process::Command::new("sh").arg("-c").arg("exit 124").status().unwrap(),
-                        stdout: stdout.into_bytes(),
-                        stderr: stderr.into_bytes(),
-                    };
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(e) => {
-                warn!("BBOT process error: {}", e);
-                break std::process::Output {
-                    status: std::process::Command::new("sh").arg("-c").arg("exit 1").status().unwrap(),
-                    stdout: Vec::new(),
-                    stderr: e.to_string().into_bytes(),
-                };
-            }
+    // Wait with timeout; wait_with_output drains stdout/stderr concurrently,
+    // avoiding pipe-buffer deadlocks on verbose scans.
+    let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
+        Ok(Ok(out)) => out,
+        Ok(Err(e)) => {
+            warn!("BBOT process error: {}", e);
+            return Ok(Vec::new());
+        }
+        Err(_) => {
+            warn!("BBOT timed out after {:?} (partial results discarded)", timeout);
+            return Ok(Vec::new());
         }
     };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        warn!("BBOT exited with status {:?}: {}", output.status, stderr);
+        warn!(
+            "BBOT exited with status {:?}: {}",
+            output.status,
+            stderr.chars().take(500).collect::<String>()
+        );
     }
 
-    // Parse JSON output
+    // Parse JSON event lines. BBOT emits {"type": "DNS_NAME", "host": "..."} etc.
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
+        let line = line.trim();
+        if !line.starts_with('{') {
+            continue;
+        }
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
             if let Some(event_type) = json.get("type").and_then(|v| v.as_str()) {
-                if event_type == "subdomain" || event_type == "dns" || event_type == "baddns" {
-                    if let Some(subdomain) = json.get("subdomain").and_then(|v| v.as_str()) {
-                        let clean = subdomain.strip_prefix("*.").unwrap_or(subdomain);
-                        if is_subdomain_of(clean, &config.domain) {
-                            subdomains.insert(clean.to_string());
+                let is_dns_event = matches!(
+                    event_type,
+                    "DNS_NAME" | "DNS_NAME_UNRESOLVED" | "SUBDOMAIN" | "dns" | "subdomain"
+                );
+                if is_dns_event {
+                    // Prefer `host`, fall back to `data` (BBOT 3.x event schema)
+                    let host = json
+                        .get("host")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| json.get("data").and_then(|v| v.as_str()))
+                        .or_else(|| json.get("subdomain").and_then(|v| v.as_str()));
+
+                    if let Some(host) = host {
+                        if let Some(clean) = sanitize_host(host) {
+                            if is_subdomain_of(&clean, &config.domain) {
+                                subdomains.insert(clean);
+                            }
                         }
                     }
                 }
@@ -125,6 +129,21 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
     let result: Vec<String> = subdomains.into_iter().collect();
     info!("BBOT found {} subdomains", result.len());
     Ok(result)
+}
+
+/// Extract a bare hostname from a BBOT event value, rejecting non-host strings
+fn sanitize_host(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.contains(' ') || value.contains('/') || value.contains('@') {
+        return None;
+    }
+    // Strip port if present (e.g. "www.example.com:443")
+    let host = value.split(':').next().unwrap_or(value);
+    if host.is_empty() {
+        return None;
+    }
+    let clean = host.strip_prefix("*.").unwrap_or(host);
+    Some(clean.trim_end_matches('.').to_lowercase())
 }
 
 /// Check if a domain is a subdomain of the target domain
@@ -150,5 +169,14 @@ mod tests {
         assert!(is_subdomain_of("api.v2.example.com", "example.com"));
         assert!(!is_subdomain_of("example.com.evil.com", "example.com"));
         assert!(!is_subdomain_of("evil.com", "example.com"));
+    }
+
+    #[test]
+    fn test_sanitize_host() {
+        assert_eq!(sanitize_host("WWW.Example.com."), Some("www.example.com".to_string()));
+        assert_eq!(sanitize_host("*.example.com"), Some("example.com".to_string()));
+        assert_eq!(sanitize_host("example.com:443"), Some("example.com".to_string()));
+        assert_eq!(sanitize_host("https://example.com"), None);
+        assert_eq!(sanitize_host("not a host"), None);
     }
 }
