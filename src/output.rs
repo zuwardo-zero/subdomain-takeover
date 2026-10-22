@@ -109,10 +109,10 @@ async fn write_summary(config: &Config, results: &ScanResults) -> Result<()> {
         let status = if result.vulnerable { "VULNERABLE" } else { "OK" };
         summary.push_str(&format!("{} - {}\n", result.subdomain, status));
 
-        if let Some(cname) = &result.cname {
-            if !cname.is_empty() {
-                summary.push_str(&format!("  CNAME: {}\n", cname));
-            }
+        if let Some(cname) = &result.cname
+            && !cname.is_empty()
+        {
+            summary.push_str(&format!("  CNAME: {}\n", cname));
         }
 
         if !result.fingerprints.is_empty() {
@@ -207,10 +207,10 @@ pub fn print_results(results: &[TakeoverResult], only_vulnerable: bool) {
             }
         } else if !only_vulnerable {
             println!("✓ {} - OK", result.subdomain);
-            if let Some(cname) = &result.cname {
-                if !cname.is_empty() {
-                    println!("   CNAME: {}", cname);
-                }
+            if let Some(cname) = &result.cname
+                && !cname.is_empty()
+            {
+                println!("   CNAME: {}", cname);
             }
         }
     }
