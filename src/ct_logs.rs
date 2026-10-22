@@ -6,7 +6,6 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::time::Duration;
-use tokio::time::sleep;
 use tracing::{debug, warn};
 
 #[derive(Deserialize, Debug)]
@@ -33,22 +32,22 @@ pub async fn enumerate(config: &Config) -> Result<Vec<String>> {
     let client = build_client(config)?;
     let mut subdomains = HashSet::new();
 
-    // Primary source: crt.sh
-    let crt_subdomains = query_crt_sh(&client, &config.domain).await?;
-    subdomains.extend(crt_subdomains);
+    // Each source is best-effort: a failure from one must not abort the scan
+    match query_crt_sh(&client, &config.domain, config.timeout).await {
+        Ok(subs) => subdomains.extend(subs),
+        Err(e) => warn!("crt.sh query failed (continuing with other sources): {}", e),
+    }
 
     // Secondary source: CertSpotter
-    let certspotter_subdomains = query_certspotter(&client, &config.domain).await?;
-    subdomains.extend(certspotter_subdomains);
+    match query_certspotter(&client, &config.domain).await {
+        Ok(subs) => subdomains.extend(subs),
+        Err(e) => warn!("CertSpotter query failed (continuing): {}", e),
+    }
 
     // Tertiary source: URLScan.io
-    let urlscan_subdomains = query_urlscan(&client, &config.domain).await?;
-    subdomains.extend(urlscan_subdomains);
-
-    // Rate limiting between requests
-    if config.ct_rate_limit > 0 {
-        let delay = Duration::from_millis(1000 / config.ct_rate_limit as u64);
-        sleep(delay).await;
+    match query_urlscan(&client, &config.domain).await {
+        Ok(subs) => subdomains.extend(subs),
+        Err(e) => warn!("URLScan.io query failed (continuing): {}", e),
     }
 
     Ok(subdomains.into_iter().collect())
@@ -65,11 +64,16 @@ fn build_client(config: &Config) -> Result<Client> {
     Ok(client)
 }
 
-async fn query_crt_sh(client: &Client, domain: &str) -> Result<Vec<String>> {
+async fn query_crt_sh(client: &Client, domain: &str, timeout_secs: u64) -> Result<Vec<String>> {
     let url = format!("https://crt.sh/?q=%.{}&output=json", domain);
     debug!("Querying crt.sh: {}", url);
 
-    let response = client.get(&url).send().await?;
+    // crt.sh is frequently slow - allow a longer timeout than the global one
+    let response = client
+        .get(&url)
+        .timeout(Duration::from_secs(timeout_secs.max(60)))
+        .send()
+        .await?;
 
     if !response.status().is_success() {
         warn!("crt.sh returned status: {}", response.status());

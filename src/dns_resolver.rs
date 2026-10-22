@@ -137,6 +137,7 @@ async fn resolve_subdomain(
         txt_records: Vec::new(),
         ns_records: Vec::new(),
         mx_records: Vec::new(),
+        dangling_cnames: Vec::new(),
     };
 
     // Resolve A records
@@ -222,7 +223,29 @@ async fn resolve_subdomain(
         }
     }
 
-    debug!("Resolved {}: A={}, AAAA={}, CNAME={}", subdomain, record.a_records.len(), record.aaaa_records.len(), record.cname_records.len());
+    // Detect dangling CNAME: final target no longer resolves (NXDOMAIN).
+    // This is the actual subdomain takeover scenario - the CNAME still points
+    // at a provider hostname whose resource was deleted.
+    if let Some(last_target) = record.cname_records.last().cloned() {
+        if !last_target.is_empty() {
+            match resolver.lookup_ip(&last_target).await {
+                Ok(_) => {}
+                Err(e) => {
+                    use trust_dns_resolver::error::ResolveErrorKind;
+                    let is_nxdomain = matches!(
+                        e.kind(),
+                        ResolveErrorKind::NoRecordsFound { response_code, .. }
+                            if *response_code == trust_dns_proto::op::ResponseCode::NXDomain
+                    );
+                    if is_nxdomain {
+                        record.dangling_cnames.push(last_target);
+                    }
+                }
+            }
+        }
+    }
+
+    debug!("Resolved {}: A={}, AAAA={}, CNAME={}, dangling={}", subdomain, record.a_records.len(), record.aaaa_records.len(), record.cname_records.len(), record.dangling_cnames.len());
     Ok(record)
 }
 

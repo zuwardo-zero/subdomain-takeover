@@ -10,7 +10,7 @@ A fast, concurrent subdomain takeover detection tool written in Rust. It enumera
 - **Recursive Brute Force** - Enumerates sub-subdomains for discovered subdomains (`--recursive`)
 - **BBOT Integration** - 5 modes: fast, passive, active, baddns, subdomain-enum (`--bbot --bbot-mode`)
 - **Wildcard DNS Detection** - Automatically detects and filters wildcard responses
-- **Cloud Provider Fingerprinting** - **78+ cloud services** with CNAME patterns, A/AAAA IP ranges, NXDOMAIN checks, and HTTP signature matching
+- **Cloud Provider Fingerprinting** - **78+ cloud services** with CNAME patterns, A/AAAA IP ranges, dangling CNAME / NS-based takeover checks, and HTTP signature matching
 - **CNAME Chain Following** - Resolves full CNAME chains (up to 10 hops) with loop detection
 - **Progress Bars** - Real-time progress for DNS resolution and HTTP checks
 - **Concurrent Scanning** - Configurable concurrency for DNS (`-c`) and HTTP (`--http-concurrency`) checks

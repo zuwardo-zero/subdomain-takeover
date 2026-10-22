@@ -13,6 +13,9 @@ pub struct Subdomain {
     pub txt_records: Vec<String>,
     pub ns_records: Vec<String>,
     pub mx_records: Vec<String>,
+    /// CNAME targets that do not resolve (NXDOMAIN) - potential dangling records
+    #[serde(default)]
+    pub dangling_cnames: Vec<String>,
 }
 
 /// Cloud service provider - loaded dynamically from providers.json
@@ -116,6 +119,9 @@ pub struct ProviderFingerprint {
     pub id: String,
     pub cname_patterns: Vec<String>,
     pub a_record_patterns: Vec<String>,
+    /// NS record patterns (for NS-based takeover checks, e.g. DigitalOcean)
+    #[serde(default)]
+    pub ns_patterns: Vec<String>,
     pub takeover_signatures: Vec<TakeoverSignature>,
     pub nxdomain: bool,
     pub confidence: String,

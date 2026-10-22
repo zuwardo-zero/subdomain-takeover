@@ -7,13 +7,18 @@ use std::fs;
 use tracing::info;
 
 /// Write scan results to JSON file
-pub async fn write_results(config: &Config, results: &[TakeoverResult], duration: f64) -> Result<()> {
+pub async fn write_results(
+    config: &Config,
+    results: &[TakeoverResult],
+    duration: f64,
+    total_resolved: usize,
+) -> Result<()> {
     let vulnerable_count = results.iter().filter(|r| r.vulnerable).count();
 
     let scan_results = ScanResults {
         target_domain: config.domain.clone(),
         scan_timestamp: chrono::Utc::now().to_rfc3339(),
-        total_subdomains_checked: results.len(),
+        total_subdomains_checked: total_resolved,
         vulnerable_count,
         results: results.to_vec(),
         metadata: ScanMetadata {
@@ -35,8 +40,9 @@ pub async fn write_results(config: &Config, results: &[TakeoverResult], duration
     let json = serde_json::to_string_pretty(&scan_results)?;
     fs::write(&config.output, json)?;
 
-    // Also write a human-readable summary
+    // Also write a human-readable summary and CSV
     write_summary(config, &scan_results).await?;
+    write_csv(config, results).await?;
 
     Ok(())
 }
@@ -59,7 +65,10 @@ async fn write_summary(config: &Config, results: &ScanResults) -> Result<()> {
         for result in &results.results {
             if result.vulnerable {
                 summary.push_str(&format!("Subdomain: {}\n", result.subdomain));
-                summary.push_str(&format!("  Provider: {:?} ({})\n", result.provider, result.service_name.as_deref().unwrap_or("Unknown")));
+                summary.push_str(&format!(
+                    "  Provider: {}\n",
+                    result.service_name.as_deref().unwrap_or("Unknown")
+                ));
                 summary.push_str(&format!("  CNAME: {}\n", result.cname.as_deref().unwrap_or("N/A")));
 
                 if let Some(status) = result.http_status {
@@ -108,7 +117,11 @@ async fn write_summary(config: &Config, results: &ScanResults) -> Result<()> {
 
         if !result.fingerprints.is_empty() {
             for fp in &result.fingerprints {
-                summary.push_str(&format!("  Fingerprint: {:?} - {}\n", fp.provider, fp.evidence.join(", ")));
+                summary.push_str(&format!(
+                    "  Fingerprint: {} - {}\n",
+                    fp.service_name,
+                    fp.evidence.join(", ")
+                ));
             }
         }
     }
@@ -179,7 +192,10 @@ pub fn print_results(results: &[TakeoverResult], only_vulnerable: bool) {
 
         if result.vulnerable {
             println!("\n🔴 VULNERABLE: {}", result.subdomain);
-            println!("   Provider: {:?} ({})", result.provider, result.service_name.as_deref().unwrap_or("Unknown"));
+            println!(
+                "   Provider: {}",
+                result.service_name.as_deref().unwrap_or("Unknown")
+            );
             println!("   CNAME: {}", result.cname.as_deref().unwrap_or("N/A"));
 
             if let Some(status) = result.http_status {
